@@ -1,0 +1,31 @@
+
+The auto-profiler.py tool is used to find desired operating points for each die.
+
+auto-profiler requires pyusb.  To install it:
+  pip install --pre pyusb
+
+Put these into a file /etc/udev/rules.d/01-hashfast.rules:
+
+ATTRS{idVendor}=="297c", ATTRS{idProduct}=="0001", SUBSYSTEMS=="usb", ACTION=="add", MODE="0660", GROUP="plugdev”, ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTRS{idVendor}=="297c", ATTRS{idProduct}=="8001", SUBSYSTEMS=="usb", ACTION=="add", MODE="0660", GROUP="plugdev", ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTRS{idVendor}=="03eb", ATTRS{idProduct}=="2ff6", SUBSYSTEMS=="usb", ACTION=="add", MODE="0660", GROUP="plugdev", ENV{ID_MM_DEVICE_IGNORE}="1"
+
+RUNNING
+===========
+
+Start the tool by with:
+$ ./auto-profiler.py
+
+Enter the main tool by typing 's' for start.
+
+If you have a disabled die, enter it here. 4 = No die are disabled.
+
+The tool will now run automatically. Please do not touch the keyboard. Press CTRL + C to quit.
+
+The tool will pick a starting frequency. It will then adjust voltage until the error rate is minimized.
+
+Once each die has it's error rate minimized at that frequency, it will step up the frequency.
+
+Above is repeated.
+
+At the end of the test, results are printed in the LOG window. You will now be able to program your board with any combination of these settings.

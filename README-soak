@@ -1,0 +1,19 @@
+
+The soak.py tool is used to display realtime temperature and hashing status for each die.  The intent of this tool is to allow an assembly operator to properly install  a cooling head and burn-in the system with the cooling head in place.
+
+
+When you run soak.py, type 's' to begin and enter 1-9 to set the frequency to begin the cooler head attachment process.  Start at 300 and make sure that all dies do have cooling.  'SQ' is the squelch percent. On each run, dies are slowly loaded to capacity. Once SQ reaches 0% all active and pending slots will start filling.
+ If temperature reaches 104 it will throttle back the number of cores again. If it reaches thermal it will turn off and tell you.
+As you tighten the screws on the cooler head, monitor the temperatures on soak.py to make sure that they are even.  Continue to increase the frequency until you reach 800 MHz.  Once you are at 800 MHz, check to make sure that the die temperatures are even, and let the system burn in for ten minutes or so to allow the thermal interface material to flow and settle in.
+
+soak requires pyusb.  To install it:
+pip install --pre pyusb
+
+Or, you may need to unpack pyusb-1.0.0b1.tar.bz2 and do a "sudo python3 ./setup.py install".
+
+Put these into a file /etc/udev/rules.d/01-hashfast.rules:
+
+ATTRS{idVendor}=="297c", ATTRS{idProduct}=="0001", SUBSYSTEMS=="usb", ACTION=="add", MODE="0660", GROUP="plugdev”, ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTRS{idVendor}=="297c", ATTRS{idProduct}=="8001", SUBSYSTEMS=="usb", ACTION=="add", MODE="0660", GROUP="plugdev", ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTRS{idVendor}=="03eb", ATTRS{idProduct}=="2ff6", SUBSYSTEMS=="usb", ACTION=="add", MODE="0660", GROUP="plugdev", ENV{ID_MM_DEVICE_IGNORE}="1"
+

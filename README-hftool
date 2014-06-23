@@ -1,0 +1,23 @@
+
+The hftool.py utility is used to query and manipulate hashfast module settings.
+
+hftool requires pyusb.  To install it:
+  pip install --pre pyusb
+
+Put these into a file /etc/udev/rules.d/01-hashfast.rules:
+
+ATTRS{idVendor}=="297c", ATTRS{idProduct}=="0001", SUBSYSTEMS=="usb", ACTION=="add", MODE="0660", GROUP="plugdev”, ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTRS{idVendor}=="297c", ATTRS{idProduct}=="8001", SUBSYSTEMS=="usb", ACTION=="add", MODE="0660", GROUP="plugdev", ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTRS{idVendor}=="03eb", ATTRS{idProduct}=="2ff6", SUBSYSTEMS=="usb", ACTION=="add", MODE="0660", GROUP="plugdev", ENV{ID_MM_DEVICE_IGNORE}="1"
+
+RUNNING
+===========
+
+Start the tool by with:
+$ ./hftool.py -h
+
+Read die frequencies and voltages:
+$ ./hftool.py -r
+
+Write die frequencies and settings:
+$ ./hftool.py -w 0:VLT@FRQ,1:VLT@FRQ,2:VLT@FRQ,3:VLT@FRQ

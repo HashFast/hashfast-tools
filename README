@@ -1,0 +1,31 @@
+This directory contains useful utilities for working with the boards.
+
+Suggested Ubuntu 13.10 packages:
+libusb-1.0-0-dev
+libusb-1.0-doc
+
+Suggested ArchLinux package:
+core/libusbx
+
+Running "make" under Ubuntu 13.10 or ArchLinux should just work if the
+above libusb packages are installed.  There have been problems with
+older Ubuntus (such as the LTS release) as libusb_strerror() seems not
+to be defined on those platforms.
+
+The general theory of these tools: they are used for testing which
+means that there should only be one HashFast board connected at a
+time.  If there is more than one, these tools with exit with an error.
+
+board_util.c: common routines used by the others.
+writeserial.c: writes a serial number of form "HF::<16 hex digits>::FH"
+readserial.c: reads serial number from board and prints it out
+ping.c: sends a packet over USB to the board which simply sends it back
+coremap.c: prints out the map of good and bad cores on the board
+  (Note that the EVK1101 board seems to believe it has no cores in emulation.)
+
+These header files are copied from the uc repository and will need to
+be updated periodically by hand:
+hf_protocol_be.h
+hf_protocol.h
+hf_factory.h
+

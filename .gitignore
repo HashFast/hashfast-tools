@@ -1,0 +1,42 @@
+# Ignore Emacs tilde files.
+*~
+
+# Ignore object files
+*.o
+*.so
+
+# Ignore Eclipse files
+.cproject
+.project
+.settings
+
+# Ignore pycache files
+*.pyc
+
+# Ignore log files and charts
+auto_profiler_*.csv
+profiler_*.csv
+surface_*.csv
+surface_*.eps
+surface_*.png
+
+# Ignore particular executables
+readserial
+writeserial
+ping
+coremap
+createupdate
+hfupdate
+readdb
+enterloader
+version
+thermistor
+hfudump
+readdbstream
+hfterm
+hcm
+hfsetfans
+ctrltest
+opusbinit
+da2stest
+
