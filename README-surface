@@ -1,0 +1,39 @@
+
+The surface.py tool is used to find desired operating points for each die.
+The surface-plot.py tool takes the output from surface.py and plots with GNU plot.
+
+surface requires pyusb.  To install it:
+  pip install --pre pyusb
+
+surface-plot requires gnuplot and numpy. To install it on ubunutu:
+  sudo apt-get install gnuplot gnuplot-mode gnuplot-x11
+python extensions:
+  pip install gnuplot numpy
+
+Put these into a file /etc/udev/rules.d/01-hashfast.rules:
+
+ATTRS{idVendor}=="297c", ATTRS{idProduct}=="0001", SUBSYSTEMS=="usb", ACTION=="add", MODE="0660", GROUP="plugdev”, ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTRS{idVendor}=="297c", ATTRS{idProduct}=="8001", SUBSYSTEMS=="usb", ACTION=="add", MODE="0660", GROUP="plugdev", ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTRS{idVendor}=="03eb", ATTRS{idProduct}=="2ff6", SUBSYSTEMS=="usb", ACTION=="add", MODE="0660", GROUP="plugdev", ENV{ID_MM_DEVICE_IGNORE}="1"
+
+RUNNING
+===========
+
+Start the tool by with:
+$ ./surface.py
+
+Let the tool run overnight.
+
+Feed the output from a test into surface-plot
+$ ./surface-plot.py <SURFACE_OUTPUT>.csv
+
+MODIFICATION
+============
+
+Check out surface.py lines 74 and 85 to change min / max frequency and voltage.
+
+Check out surface.py line 188 to change how long each step runs.
+
+Ideally you're supposed to run surface.py overnight (read: for a long time) while it figures out how your device performs at various frequency/voltage operating points. 
+
+The program will loop through each frequency while walking up the voltage. So it will start at 800 MHz and 840mV and go to 1050mV. Then it will jump to 825MHz and 840mV etc. 

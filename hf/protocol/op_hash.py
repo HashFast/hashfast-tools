@@ -24,7 +24,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from .frame import HF_Frame, opcodes, opnames
-from .frame import lebytes_to_int, int_to_lebytes
+from ..util import reverse_every_four_bytes, lebytes_to_int, int_to_lebytes
 
 # Imitates "struct hf_hash_serial" in hf_protocols.h.
 class hf_hash_serial():
@@ -57,11 +57,18 @@ class hf_hash_serial():
         self.group = group
         self.spare3 = spare3
         self.generate_frame_data()
-
+    '''
     def generate_frame_data(self):
         self.frame_data = self.midstate + self.merkle_residual + \
             int_to_lebytes(self.timestamp, 4) + int_to_lebytes(self.bits, 4) + \
             int_to_lebytes(self.starting_nonce, 4) + int_to_lebytes(self.nonce_loops, 4) + \
+            int_to_lebytes(self.ntime_loops, 2) + [self.search_difficulty] + \
+            [self.option] + [self.group] + self.spare3
+    '''
+    def generate_frame_data(self):
+        self.frame_data  = reverse_every_four_bytes(self.midstate + self.merkle_residual + \
+            int_to_lebytes(self.timestamp, 4) + int_to_lebytes(self.bits, 4))
+        self.frame_data += int_to_lebytes(self.starting_nonce, 4) + int_to_lebytes(self.nonce_loops, 4) + \
             int_to_lebytes(self.ntime_loops, 2) + [self.search_difficulty] + \
             [self.option] + [self.group] + self.spare3
 

@@ -32,7 +32,7 @@ from . import crc
 from . import sha256
 from . import job_library
 
-from ..util                      import with_metaclass, int_to_lebytes, lebytes_to_int
+from ..util                      import with_metaclass, int_to_lebytes, lebytes_to_int, int_to_bebytes, bebytes_to_int, reverse_every_four_bytes
 from ..protocol.frame            import HF_Frame, opcodes, opnames
 from ..protocol.op_settings      import HF_OP_SETTINGS, hf_settings, hf_die_settings
 from ..protocol.op_usb_init      import HF_OP_USB_INIT
@@ -316,205 +316,11 @@ class HF_Parse():
     else:
       return None
 
-def dice_up_coremap(lebytes, dies, cores):
-  assert len(lebytes) % 4 == 0
-  assert 8 * len(lebytes) >= dies * cores
-  assert dies > 0 and cores > 0
-  die_modulus = 2 ** cores
-  global_bitmap = lebytes_to_int(lebytes)
-  die_coremaps = []
-  for die in range(dies):
-    single_die_map = coremap_array(global_bitmap % die_modulus, cores)
-    die_coremaps = [single_die_map] + die_coremaps
-    global_bitmap = global_bitmap >> cores
-  return die_coremaps
-
-def coremap_array(die_bitmap, cores):
-  result = []
-  mask = 0x1
-  for i in range(cores):
-    if die_bitmap & mask > 0:
-      result = result + [1]
-    else:
-      result = result + [0]
-    mask = mask << 1
-  return result
-
-def display_cores_by_G1_location(ca, printer):
-  for line in display_cores_by_G1_location_lines(ca):
-    printer(line)
-
-def display_cores_by_G1_location_lines(ca):
-  def I(yesno):
-    if yesno > 0:
-      return 'x'
-    else:
-      return ' '
-  def NI(yesno):
-    if yesno > 0:
-      return 'X'
-    else:
-      return ' '
-  assert len(ca) == 96
-  return ["".join([NI(ca[95]),  I(ca[74]), NI(ca[73]),  I(ca[53]), NI(ca[52]),  I(ca[33]), NI(ca[32]),  I(ca[11]), NI(ca[10])]),
-      "".join([ I(ca[94]), NI(ca[75]),  I(ca[72]), NI(ca[54]),  I(ca[51]), NI(ca[34]),  I(ca[31]), NI(ca[12]),  I(ca[9])]),
-      "".join([NI(ca[93]),  I(ca[76]), NI(ca[71]),  I(ca[55]), NI(ca[50]),  I(ca[35]), NI(ca[30]),  I(ca[13]), NI(ca[8])]),
-      "".join([ I(ca[92]), NI(ca[77]),  I(ca[70]), NI(ca[56]),  I(ca[49]), NI(ca[36]),  I(ca[29]), NI(ca[14]),  I(ca[7])]),
-      "".join([NI(ca[91]),  I(ca[78]), NI(ca[69]),  I(ca[57]), NI(ca[48]),  I(ca[37]), NI(ca[28]),  I(ca[15]), NI(ca[6])]),
-      "".join([ I(ca[90]), NI(ca[79]),  I(ca[68]), NI(ca[58]),  I(ca[47]), NI(ca[38]),  I(ca[27]), NI(ca[16]),  I(ca[5])]),
-      "".join([NI(ca[89]),  I(ca[80]), NI(ca[67]),  I(ca[59]), NI(ca[46]),  I(ca[39]), NI(ca[26]),  I(ca[17]), NI(ca[4])]),
-      "".join([ I(ca[88]), NI(ca[81]),  I(ca[66]), NI(ca[60]),  I(ca[45]), NI(ca[40]),  I(ca[25]), NI(ca[18]),  I(ca[3])]),
-      "".join([NI(ca[87]),  I(ca[82]), NI(ca[65]),  I(ca[61]), NI(ca[44]),  I(ca[41]), NI(ca[24]),  I(ca[19]), NI(ca[2])]),
-      "".join([ I(ca[86]), NI(ca[83]),  I(ca[64]), NI(ca[62]),  I(ca[43]), NI(ca[42]),  I(ca[23]), NI(ca[20]),  I(ca[1])]),
-      "".join([NI(ca[85]),  I(ca[84]), NI(ca[63]),      'O',          'O',        'O', NI(ca[22]),  I(ca[21]), NI(ca[0])])]
-
-# Fix: This really needs test code and documentation.  Make sure it
-#      works for future designs as well as G1.
-def decode_op_status_job_map(jobmap, cores):
-  assert 8 * len(jobmap) <= 2 * cores
-  bitmap = lebytes_to_int(jobmap)
-  active_map = [0] * cores
-  for i in range(cores):
-    if bitmap & (1 << 2*i) > 0:
-      active_map[i] = 1
-  pending_map = [0] * cores
-  for i in range(cores):
-    if bitmap & (1 << (2*i + 1)) > 0:
-      pending_map[i] = 1
-  return [active_map, pending_map]
-
-# Fix: Remove this if we don't need it.
-# Find empties: takes core list like [0,1,0,0,1...] and converts to
-# dictionary in which each key is an empty slot.
-def core_list_to_dict(corelist):
-  empties = {}
-  for i in range(len(corelist)):
-    if corelist[i] == 0:
-      empties[i] = 1
-  return empties
-
-# Fix: cores -> slots
-def list_available_cores(corelist):
-  empties = []
-  for i in range(len(corelist)):
-    if corelist[i] == 0:
-      empties.append(i)
-  return empties
-
-def random_work(search_difficulty):
-  midstate = list(randbytes(32))
-  merkle_residual = list(randbytes(4))
-  timestamp = lebytes_to_int(randbytes(4))
-  bits = lebytes_to_int(randbytes(4))
-  return hf_hash_serial(midstate, merkle_residual, timestamp, bits, 0, 0, 0, search_difficulty, 0, 0, [0, 0, 0])
-
 def randbytes(count, source="/dev/urandom"):
   src = open(source, "rb")
   rslt = src.read(count)
   src.close()
   return rslt
-
-import hashlib
-
-# version: integer
-# previous_block_hash: 32 bytes in order specified by FIPS-180-4
-#   (Sometimes called "big-endian".)
-# merkle_root_hash: 32 bytes in order specified by FIPS-180-4
-#   (Sometimes called "big-endian".)
-# time: integer
-# bits: integer
-# nonce: integer
-#def compute_block_hash(version, previous_block_hash, merkle_root_hash, time, bits, nonce):
-#    hash_input = prepare_block_hash_input(version, previous_block_hash, merkle_root_hash, time, bits, nonce)
-  # Fix: Debugging.
-#    print("hash_input: %s" % (hash_input))
-#    hash1 = hashlib.sha256(bytes(hash_input)).digest()
-#    hash2 = hashlib.sha256(hash1).digest()
-#    return hash2
-def compute_block_hash(version, previous_block_hash, merkle_root_hash, time, bits, nonce):
-  assert version >= 0 and version < 2**32
-  assert len(previous_block_hash) == 32
-  assert {x >= 0 and x < 256 for x in previous_block_hash} == set([True])
-  assert len(merkle_root_hash) == 32
-  assert {x >= 0 and x < 256 for x in merkle_root_hash} == set([True])
-  assert time >=0 and time < 2**32
-  assert bits >=0 and bits < 2**32
-  assert nonce >= 0 and nonce < 2**32
-  version_bytes = int_to_lebytes(version, 4)
-  time_bytes = int_to_lebytes(time, 4)
-  bits_bytes = int_to_lebytes(bits, 4)
-  nonce_bytes = int_to_lebytes(nonce, 4)
-  hash_input = version_bytes + previous_block_hash + merkle_root_hash + time_bytes + bits_bytes + nonce_bytes
-  hash1 = hashlib.sha256(bytes(hash_input)).digest()
-  hash2 = hashlib.sha256(hash1).digest()
-  return hash2
-
-def prepare_block_hash_input(version, previous_block_hash, merkle_root_hash, time, bits, nonce):
-  assert version >= 0 and version < 2**32
-  assert len(previous_block_hash) == 32
-  assert {x >= 0 and x < 256 for x in previous_block_hash} == set([True])
-  assert len(merkle_root_hash) == 32
-  assert {x >= 0 and x < 256 for x in merkle_root_hash} == set([True])
-  assert time >=0 and time < 2**32
-  assert bits >=0 and bits < 2**32
-  assert nonce >= 0 and nonce < 2**32
-  version_bytes = int_to_lebytes(version, 4)
-  pbh_bytes = list(previous_block_hash)
-  pbh_bytes.reverse()
-  mrh_bytes = list(merkle_root_hash)
-  mrh_bytes.reverse()
-  time_bytes = int_to_lebytes(time, 4)
-  bits_bytes = int_to_lebytes(bits, 4)
-  nonce_bytes = int_to_lebytes(nonce, 4)
-  hash_input = version_bytes + pbh_bytes + mrh_bytes + time_bytes + bits_bytes + nonce_bytes
-  return hash_input
-
-import binascii
-
-#def compute_midstate(version, previous_block_hash, merkle_root_hash):
-#    midstate_raw_input = prepare_block_hash_input(version, previous_block_hash, merkle_root_hash, 0x00, 0x00, 0x00)
-#    midstate_input = midstate_raw_input[0:64]
-#    print("midstate_input: %s" % (binascii.hexlify(bytes(midstate_input))))
-#    hash_result = hashlib.sha256(bytes(midstate_input)).digest()
-#    return hash_result
-
-def compute_midstate(version, previous_block_hash, merkle_root_hash):
-  assert version >= 0 and version < 2**32
-  assert len(previous_block_hash) == 32
-  assert {x >= 0 and x < 256 for x in previous_block_hash} == set([True])
-  assert len(merkle_root_hash) == 32
-  assert {x >= 0 and x < 256 for x in merkle_root_hash} == set([True])
-  version_bytes = int_to_lebytes(version, 4)
-  block_begin = version_bytes + previous_block_hash + merkle_root_hash
-  hash_input = block_begin[0:64]
-  hash1 = hashlib.sha256(bytes(hash_input)).digest()
-  hash2 = hashlib.sha256(hash1)
-  return hash2.digest()
-
-def cgminer_flip64(sixty_four):
-  assert len(sixty_four) == 64
-  result = []
-  for i in range(16):
-    a = sixty_four[4*i:4*i+4]
-    b = list(a)
-    b.reverse()
-    result = result + b
-  return result
-
-def cgminer_calc_midstate(sixty_four):
-  assert len(sixty_four) == 64
-  sixty_four_flipped = cgminer_flip64(sixty_four)
-  return hashlib.sha256(bytes(sixty_four_flipped)).digest()
-
-def flip32(thirty_two):
-  assert len(thirty_two) == 32
-  assert {x >= 0 and x < 256 for x in thirty_two} == set([True])
-  result = []
-  for i in range(8):
-    a = thirty_two[4*i:4*i+4]
-    a.reverse()
-    result = result + a
-  return result
 
 # Counts leading zero bits from most significant bit to the least significant.
 def count_leading_zero_bits(byte):
@@ -563,7 +369,7 @@ import array
 
 def rand_job(rnd):
   newjob = {}
-  newjob['version'] = 2
+  newjob['version']                 = 2
   newjob['previous block hash']     = list(bytearray(rnd.read(32)))
   newjob['merkle tree root']        = list(bytearray(rnd.read(32)))
   newjob['timestamp']= lebytes_to_int(list(bytearray(rnd.read(4))))
@@ -573,7 +379,21 @@ def rand_job(rnd):
   newjob['ntime loops']             = 0
   return newjob
 
-def det_job(rnd, amount=15):
+### BLOCK 125552 ###
+### nonce 3184732951
+def known_job(rnd = None):
+  newjob = {}
+  newjob['version']                 = 2
+  newjob['previous block hash']     = [1, 184, 50, 44, 80, 156, 174, 181, 117, 51, 152, 109, 229, 243, 29, 16, 24, 149, 147, 60, 212, 101, 109, 6, 0, 0, 0, 0, 0, 0, 0, 0]
+  newjob['merkle tree root']        = [149, 15, 153, 150, 253, 52, 157, 28, 88, 39, 129, 252, 66, 51, 213, 184, 181, 159, 85, 106, 230, 32, 139, 145, 115, 242, 191, 21, 15, 202, 142, 170]
+  newjob['timestamp']               = 1401405809
+  newjob['bits']                    = 409544770
+  newjob['starting nonce']          = 0
+  newjob['nonce loops']             = 0
+  newjob['ntime loops']             = 0
+  return newjob
+
+def det_job(rnd, amount=32):
   if isinstance(rnd, int):
     library_number = rnd % amount
   else:
@@ -581,24 +401,6 @@ def det_job(rnd, amount=15):
   job = job_library.jobs[library_number].copy()
   job['library_number'] = library_number
   return job
-
-def check_nonce(job, nonce, zerobits_required):
-  assert check_job(job)
-  assert nonce >= 0 and nonce < 4294967296 # 32 bits
-  assert zerobits_required >= 0 and zerobits_required < 256
-  feed_to_regen_hash = int_to_lebytes(job['version'], 4) + \
-    job['previous block hash'] + \
-    job['merkle tree root'] + \
-    int_to_lebytes(job['timestamp'], 4) + \
-    int_to_lebytes(job['bits'], 4) + \
-    int_to_lebytes(nonce, 4)
-  regen_hash = sha256.cgminer_regen_hash(feed_to_regen_hash)
-  regen_hash_expanded = list(regen_hash)
-  zerobits = count_leading_zeros(regen_hash_expanded)
-  if zerobits >= zerobits_required:
-    return True
-  else:
-    return False
 
 def check_nonce_work(job, nonce):
   assert check_job(job)
@@ -616,26 +418,17 @@ def check_nonce_work(job, nonce):
 
 def check_job(job):
   job_fields = set(['version', 'previous block hash', 'merkle tree root', 'timestamp', 'bits', 'starting nonce', 'nonce loops', 'ntime loops', 'solutions', 'library_number'])
-  if not set(job.keys()).issubset(job_fields):
-    return False
+  assert (set(job.keys()).issubset(job_fields))
   two_to_32 = 0x1 << 32
   two_to_16 = 0x1 << 16
-  if not(job['version'] >= 0 and job['version'] < two_to_32):
-    return False
-  if not({x >= 0 and x < 256 for x in job['previous block hash']} == set([True])):
-    return False
-  if not({x >= 0 and x < 256 for x in job['merkle tree root']} == set([True])):
-    return False
-  if not(job['timestamp'] >= 0 and job['timestamp'] < two_to_32):
-    return False
-  if not(job['bits'] >= 0 and job['bits'] < two_to_32):
-    return False
-  if not(job['starting nonce'] >= 0 and job['starting nonce'] < two_to_32):
-    return False
-  if not(job['nonce loops'] >= 0 and job['nonce loops'] < two_to_32):
-    return False
-  if not(job['ntime loops'] >= 0 and job['ntime loops'] < two_to_16):
-    return False
+  assert (job['version'] >= 0 and job['version'] < two_to_32)
+  assert ({x >= 0 and x < 256 for x in job['previous block hash']} == set([True]))
+  assert ({x >= 0 and x < 256 for x in job['merkle tree root']} == set([True]))
+  assert (job['timestamp'] >= 0 and job['timestamp'] < two_to_32)
+  assert (job['bits'] >= 0 and job['bits'] < two_to_32)
+  assert (job['starting nonce'] >= 0 and job['starting nonce'] < two_to_32)
+  assert (job['nonce loops'] >= 0 and job['nonce loops'] < two_to_32)
+  assert (job['ntime loops'] >= 0 and job['ntime loops'] < two_to_16)
   return True
 
 def prepare_hf_hash_serial(job, search_difficulty):
@@ -644,15 +437,15 @@ def prepare_hf_hash_serial(job, search_difficulty):
   # Fix: Note that we do not know exactly how to feed the fields from real blocks
   #      into this function.  It works with random bytes because we don't care
   #      about their order.
-  midstate = sha256.cgminer_calc_midstate(int_to_lebytes(job['version'], 4) + job['previous block hash'] + job['merkle tree root'][0:28])
+  midstate = sha256.cgminer_calc_midstate(int_to_lebytes(job['version'], 4) + job['previous block hash'][0:32] + job['merkle tree root'][0:28])
   return hf_hash_serial(midstate,
-              job['merkle tree root'][28:32],
-              job['timestamp'],
-              job['bits'],
-              job['starting nonce'],
-              job['nonce loops'],
-              job['ntime loops'],
-              search_difficulty, 0, 0, [0, 0, 0])
+                        job['merkle tree root'][28:32],
+                        job['timestamp'],
+                        job['bits'],
+                        job['starting nonce'],
+                        job['nonce loops'],
+                        job['ntime loops'],
+                        search_difficulty, 0, 0, [0, 0, 0])
 
 def nominal_hash_rate(clockrate):
   return 0.768 * clockrate - 0.03 * 0.768 * clockrate

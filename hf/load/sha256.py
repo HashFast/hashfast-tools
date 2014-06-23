@@ -23,7 +23,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from ..util import bebytes_to_int, int_to_bebytes
+from ..util import bebytes_to_int, int_to_bebytes, reverse_every_four_bytes
 
 # Reference implementation of SHA-256.
 
@@ -240,28 +240,18 @@ def cgminer_calc_midstate(sixty_four_bytes):
     assert len(sixty_four_bytes) == 64
     assert {x >=0 and x < 256 for x in sixty_four_bytes} == set([True])
     sfb = list(sixty_four_bytes)
-    sfb = reverse_every_four_bytes(sfb)
+    #sfb = reverse_every_four_bytes(sfb)
     midstate = sha256_midstate(sfb)
     midstate_bytes = midstate_to_bytes(midstate)
-    midstate_bytes = reverse_every_four_bytes(midstate_bytes)
+    #midstate_bytes = reverse_every_four_bytes(midstate_bytes)
     return midstate_bytes
-
-def reverse_every_four_bytes(bytelist):
-    assert len(bytelist) % 4 == 0
-    assert {x >= 0 and x < 256 for x in bytelist} == set([True])
-    result = []
-    for i in range(int(len(bytelist)/4)):
-        a = bytelist[4*i:4*i+4]
-        a.reverse()
-        result = result + a
-    return result
 
 # Fix: This should be oriented to operating on lists of bytes.
 def cgminer_regen_hash(eighty_bytes):
     assert len(eighty_bytes) == 80
     assert {x >=0 and x < 256 for x in eighty_bytes} == set([True])
     eb = list(eighty_bytes)
-    eb = reverse_every_four_bytes(eb)
+    #eb = reverse_every_four_bytes(eb)
     hash1 = sha256(eb) #PY23 sha256(bytes(eb))
     hash2 = sha256(hash1)
     return hash2

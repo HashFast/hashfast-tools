@@ -25,36 +25,25 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# Running on Debian (sudo may be required):
-#   apt-get update
-#   apt-get install python-pip
-#   pip install --pre pyusb
-#   ./ctrltest.py
+import argparse
+
+def parse_args():
+  parser = argparse.ArgumentParser(description='Read and write various settings.')
+  parser.add_argument('-r', '--read-die-settings', dest='read_die_settings', action='store_true', help='read die settings')
+  parser.add_argument('-w', '--write-die-settings', dest='write_die_settings', type=str, nargs=4, metavar=('DIE:mVLT@FRQ'), help='write die settings')
+  return parser.parse_args()
+
+if __name__ == '__main__':
+  # parse args before other imports
+  args = parse_args()
 
 import sys
-import getopt
 from hf.usb import usbbulk
 from hf.load import talkusb
 from hf.load.routines import settings
 
-def main(argv):
-  #
-  # usage
-  #
-  usage  = "usage: hcm.py\n"
-  usage += "    -r                          read die settings\n"
-  usage += "    -w <<die>:<vlt>@<frq>>,<..> write die settings\n"
-  # 
-  # get opt
-  #
-  try:
-    opts, args = getopt.getopt(argv,"hrw:")
-  except getopt.GetoptError:
-    print (usage)
-    sys.exit(2)
-  # 
+def main(args):
   # query device
-  #
   dev = usbbulk.poll_hf_bulk_device()
   print (dev.info())
   print (dev.init())
@@ -69,25 +58,19 @@ def main(argv):
 
   setter = settings.SettingsRoutine(talkusb.talkusb, 1, printmsg)
 
-  #
-  # parse args
-  #
-  for opt, arg in opts:
-    if   opt == '-h':
-      print (usage)
-      sys.exit()
-    elif opt == '-r':
-      setter.global_state = 'read'
-      while setter.one_cycle():
-        pass
-    elif opt == '-w':
-      die_settings = arg.split(',')
-      for die_setting in die_settings:
-        die, setting = die_setting.split(':')
-        vlt, frq     = setting.split('@')
-        setter.setup(int(die), int(frq), int(vlt))
-      while setter.one_cycle():
-        pass
+  if args.read_die_settings:
+    setter.global_state = 'read'
+    while setter.one_cycle():
+      pass
+
+  if args.write_die_settings is not None:
+    die_settings = args.write_die_settings
+    for die_setting in die_settings:
+      die, setting = die_setting.split(':')
+      vlt, frq     = setting.split('@')
+      setter.setup(int(die), int(frq), int(vlt))
+    while setter.one_cycle():
+      pass
 
 if __name__ == "__main__":
-   main(sys.argv[1:])
+   main(args)

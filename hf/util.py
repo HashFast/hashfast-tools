@@ -61,3 +61,13 @@ def int_to_bebytes(integer, digit):
   lebytes = int_to_lebytes(integer, digit)
   lebytes.reverse()
   return lebytes
+
+def reverse_every_four_bytes(bytelist):
+    assert len(bytelist) % 4 == 0
+    assert {x >= 0 and x < 256 for x in bytelist} == set([True])
+    result = []
+    for i in range(int(len(bytelist)/4)):
+        a = bytelist[4*i:4*i+4]
+        a.reverse()
+        result = result + a
+    return result

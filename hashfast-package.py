@@ -25,49 +25,40 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import argparse
+
+def parse_args():
+  parser = argparse.ArgumentParser(description='Package a specific HashFast tool for distribution.')
+  parser.add_argument('-s', '--soak', dest='soak', action='store_true', help='package soak tool')
+  parser.add_argument('-a', '--auto-profiler', dest='autoprofiler', action='store_true', help='package auto-profiler tool')
+  parser.add_argument('-f', '--hftool', dest='hftool', action='store_true', help='package hftool')
+  parser.add_argument('-z', '--zip', dest='zip', action='store_true', help='gzip each package')
+  return parser.parse_args()
+
+if __name__ == '__main__':
+  # parse args before other imports
+  args = parse_args()
+
 import sys
 import time
 import datetime
-import getopt
 import os
 import tarfile
 import shutil
 
-def main(argv):
-
-  # usage
-  usage  = "usage: hf-package.py\n"
-  usage += "    -s                          package soak tool\n"
-  usage += "    -a                          package auto-profiler\n"
-  usage += "    -f                          package hftool\n"
-  usage += "    -z                          gzip packages\n"
-
-  # get opt
-  try:
-    opts, args = getopt.getopt(argv,"hsafz")
-  except getopt.GetoptError:
-    print (usage)
-    sys.exit(2)
+def main(args):
 
   packages = []
-  package_zip = False
 
-  # parse args
-  for opt, arg in opts:
-    if   opt == '-h':
-      print (usage)
-      sys.exit()
-    elif opt == '-s':
-      packages.append("soak")
-    elif opt == '-a':
-      packages.append("auto-profiler")
-    elif opt == '-f':
-      packages.append("hftool")
-    elif opt == '-z':
-      package_zip = True
+  if args.soak:
+    packages.append("soak")
+  if args.autoprofiler:
+    packages.append("auto-profiler")
+  if args.hftool:
+    packages.append("hftool")
   
   for package in packages:
-    package_python(package, package_zip)
+    package_python(package, args.zip)
 
 def package_python(package, package_zip=False):
 
@@ -106,4 +97,4 @@ def package_python(package, package_zip=False):
     tar.close()
 
 if __name__ == "__main__":
-   main(sys.argv[1:])
+   main(args)

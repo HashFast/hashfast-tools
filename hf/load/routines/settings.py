@@ -37,13 +37,14 @@ from ..hf import HF_Error, HF_Thermal
 from ..hf import Send, Receive
 from ..hf import HF_Parse, Garbage
 from ..hf import SHUTDOWN
-from ..hf import decode_op_status_job_map, list_available_cores, rand_job, det_job
-from ..hf import prepare_hf_hash_serial, check_nonce_work, sequence_a_leq_b
+from ..hf import rand_job, det_job
+from ..hf import check_nonce_work, sequence_a_leq_b
 
-from ...protocol.frame            import HF_Frame, opcodes, opnames, lebytes_to_int
+from ...util                      import with_metaclass, int_to_lebytes, lebytes_to_int
+from ...protocol.frame            import HF_Frame, opcodes, opnames
 from ...protocol.op_settings      import HF_OP_SETTINGS, hf_settings, hf_die_settings
 from ...protocol.op_power         import HF_OP_POWER
-from ...protocol.op_usb_init      import HF_OP_USB_INIT
+from ...protocol.op_usb_init      import HF_OP_USB_INIT, decode_op_status_job_map, list_available_cores
 from ...protocol.op_usb_shutdown  import HF_OP_USB_SHUTDOWN
 from ...protocol.op_hash          import HF_OP_HASH
 from ...protocol.op_nonce         import HF_OP_NONCE

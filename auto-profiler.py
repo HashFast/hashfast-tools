@@ -25,6 +25,36 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import argparse
+
+def parse_args():
+  parser = argparse.ArgumentParser(description='Auto-profile HashFast boards in order to find optimal operating points.')
+  parser.add_argument('-r', '--revision', dest='revision', type=int, default=3, help='HashFast board major revision number')
+  return parser.parse_args()
+
+if __name__ == '__main__':
+  # parse args before other imports
+  args = parse_args()
+  if args.revision is 3:
+    FRQ_MIN = 925
+    FRQ_MAX = 1000
+    VLT_MIN = 900
+    VLT_MAX = 1020
+  else:
+    FRQ_MIN = 500
+    FRQ_MAX = 700
+    VLT_MIN = 720
+    VLT_MAX = 900
+
+# frequency steps
+FRQ_STEP = 12.5
+FRQS = [int(x/2) for x in range(FRQ_MIN*2, FRQ_MAX*2, int(FRQ_STEP*2))]
+# voltage steps
+VLT_STEP = 5
+VLTS = [x for x in range(VLT_MIN, VLT_MAX, VLT_STEP)]
+# step time
+STEP_TIME = 4*60 # 4 minutes
+
 import sys
 import time
 import threading
@@ -41,16 +71,6 @@ from hf.load.routines   import settings
 from hf.load.routines   import thermal
 from hf.usb             import usbbulk
 from hf.usb             import usbctrl
-
-FRQ_MIN  = 925
-FRQ_MAX  = 1000
-FRQ_STEP = 12.5
-FRQS = [int(x/2) for x in range(FRQ_MIN*2, FRQ_MAX*2, int(FRQ_STEP*2))]
-
-VLT_MIN  = 900
-VLT_MAX  = 1020
-VLT_STEP = 5
-VLTS = [x for x in range(VLT_MIN, VLT_MAX, VLT_STEP)]
 
 fn = OrderedDict([('die',None),('frequency',None),('voltage',None),('hashrate',None),('hashes',None),('jobs',None),('nonces',None),
                   ('lhw',None),('dhw',None),('chw',None),('temperature',None),('core_voltage',None),('thermal_cutoff',None),('elapsed',None),
@@ -205,7 +225,7 @@ class HFProfilerInteractive(HFProfilerBase):
         loop_time = 0.4
         time.sleep(loop_time)
         runtime += loop_time
-        if runtime > 4*60: # 4 minutes
+        if runtime > STEP_TIME:
           self.req_stop = True
         # die voltage
         for di, drs in enumerate(run_stats):
@@ -302,7 +322,7 @@ class HFProfilerUI(BaseUI):
   def refresh_ui(self):
     pass
 
-def main(argv):
+def main(args):
   ui = HFProfilerUI()
   try:
     ui.setup()
@@ -320,4 +340,4 @@ def main(argv):
     ui.end()
 
 if __name__ == "__main__":
-   main(sys.argv[1:])
+  main(args)

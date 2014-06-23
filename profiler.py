@@ -25,6 +25,28 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import argparse
+
+def parse_args():
+  parser = argparse.ArgumentParser(description='Profile HashFast boards in order to find optimal operating points.')
+  parser.add_argument('-r', '--revision', dest='revision', type=int, default=3, help='HashFast board major revision number')
+  return parser.parse_args()
+
+if __name__ == '__main__':
+  # parse args before other imports
+  args = parse_args()
+  if args.revision is 3:
+    FRQ_MIN = 925
+    VLT_MIN = 900
+  else:
+    FRQ_MIN = 500
+    VLT_MIN = 720
+
+# frequency steps
+FRQ_STEP = 25
+# voltage steps
+VLT_STEP = 5
+
 import sys
 import time
 import threading
@@ -69,8 +91,8 @@ class HFProfilerInteractive(HFProfilerBase):
   def test(self, ui, dev):
     option = ui.prompt_int_single("Option? 0=PROM 1=DEFAULTS")
     if option is 1:
-      self.frequency = [900]*4
-      self.voltage   = [900]*4
+      self.frequency = [FRQ_MIN]*4
+      self.voltage   = [VLT_MIN]*4
     while True:
       try:
         time.sleep(1)
@@ -83,13 +105,13 @@ class HFProfilerInteractive(HFProfilerBase):
         for x in range(4):
           do = ui.prompt_int_single("Die {}? 0:SAME 1:VU 2:VD 3:FU 4:FD".format(x+1))
           if do is 1:
-            self.voltage[x] += 5
+            self.voltage[x] += VLT_STEP
           elif do is 2:
-            self.voltage[x] -= 5
+            self.voltage[x] -= VLT_STEP
           elif do is 3:
-            self.frequency[x] += 25
+            self.frequency[x] += FRQ_STEP
           elif do is 4:
-            self.frequency[x] -= 25
+            self.frequency[x] -= FRQ_STEP
           else:
             return 0
       except KeyboardInterrupt:
@@ -217,7 +239,7 @@ class HFProfilerUI(BaseUI):
   def refresh_ui(self):
     pass
 
-def main(argv):
+def main(args):
   ui = HFProfilerUI()
   try:
     ui.setup()
@@ -235,4 +257,4 @@ def main(argv):
     ui.end()
 
 if __name__ == "__main__":
-   main(sys.argv[1:])
+   main(args)

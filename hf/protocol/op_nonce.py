@@ -24,7 +24,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from .frame import HF_Frame, opcodes, opnames
-from .frame import lebytes_to_int, int_to_lebytes
+from ..util import reverse_every_four_bytes, lebytes_to_int, int_to_lebytes
 
 # From hf_protocol.h
 HF_NTIME_MASK = 0x0fff       # Mask for for ntime
@@ -35,10 +35,10 @@ HF_NONCE_SEARCH = 0x1000     # Search bit in candidate_nonce -> ntime
 class hf_candidate_nonce:
   def __init__(self, nonce_bytes):
     assert len(nonce_bytes) == 8
-    self.nonce = lebytes_to_int(nonce_bytes[0:4])
-    self.sequence = lebytes_to_int(nonce_bytes[4:6])
-    self.ntime = lebytes_to_int(nonce_bytes[6:8])
-    self.ntime_offset = self.ntime & HF_NTIME_MASK
+    self.nonce          = lebytes_to_int(reverse_every_four_bytes( nonce_bytes[0:4]) )
+    self.sequence       = lebytes_to_int(nonce_bytes[4:6])
+    self.ntime          = lebytes_to_int(nonce_bytes[6:8])
+    self.ntime_offset   = self.ntime & HF_NTIME_MASK
     self.search_forward = self.ntime & HF_NONCE_SEARCH
 
 class HF_OP_NONCE(HF_Frame):

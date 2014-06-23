@@ -25,10 +25,21 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import argparse
+
+def parse_args():
+  parser = argparse.ArgumentParser(description='Run a theoretical hashrate test.')
+  parser.add_argument('-c', '--clockrate', dest='clockrate', type=int, default=1, help='clockrate in MHz')
+  parser.add_argument('-d', '--deterministic', dest='deterministic', action='store_true', help='run a deterministic test')
+  return parser.parse_args()
+
+if __name__ == '__main__':
+  # parse args before other imports
+  args = parse_args()
+
 import random
 import sys
 import time
-import getopt
 import threading
 
 from hf.load import hf
@@ -37,34 +48,8 @@ from hf.load.routines import simple
 
 running = False
 
-def main(argv):
+def main(args):
   global running
-
-  # usage
-  usage  = "usage: hash-rate-test.py\n"
-  usage += "    -c <clockrate>              set clockrate\n"
-  usage += "    -d                          run a deterministic test\n"
-
-  # get opt
-  try:
-    opts, args = getopt.getopt(argv,"hc:d")
-  except getopt.GetoptError:
-    print (usage)
-    sys.exit(2)
-
-  # default args
-  clockrate     = 1
-  deterministic = False
-
-  # parse args
-  for opt, arg in opts:
-    if   opt == '-h':
-      print (usage)
-      sys.exit()
-    elif opt == '-c':
-      clockrate = int(arg)
-    elif opt == '-d':
-      deterministic = True
 
   # init talkusb
   talkusb.talkusb(hf.INIT, None, 0)
@@ -73,7 +58,7 @@ def main(argv):
     print(msg)
 
   # init the test
-  test = simple.SimpleRoutine(talkusb.talkusb, clockrate, printer=printmsg, deterministic=deterministic)
+  test = simple.SimpleRoutine(talkusb.talkusb, args.clockrate, printer=printmsg, deterministic=args.deterministic)
 
   # thread
   thread = threading.Thread(target=monitor, args={test})
@@ -98,4 +83,4 @@ def monitor(test):
     test.report_errors()
 
 if __name__ == "__main__":
-   main(sys.argv[1:])
+   main(args)

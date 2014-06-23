@@ -35,14 +35,14 @@ from ..hf import HF_Error, HF_Thermal
 from ..hf import Send, Receive
 from ..hf import HF_Parse, Garbage
 from ..hf import SHUTDOWN
-from ..hf import decode_op_status_job_map, list_available_cores, rand_job, det_job
-from ..hf import prepare_hf_hash_serial, check_nonce_work, sequence_a_leq_b
+from ..hf import rand_job, det_job, known_job
+from ..hf import check_nonce_work, sequence_a_leq_b, prepare_hf_hash_serial
 
-from ...util                      import with_metaclass, int_to_lebytes, lebytes_to_int
-from ...protocol.frame            import HF_Frame, opcodes, opnames, lebytes_to_int
+from ...util                      import with_metaclass, int_to_lebytes, lebytes_to_int, reverse_every_four_bytes
+from ...protocol.frame            import HF_Frame, opcodes, opnames
 from ...protocol.op_settings      import HF_OP_SETTINGS, hf_settings, hf_die_settings
 from ...protocol.op_power         import HF_OP_POWER
-from ...protocol.op_usb_init      import HF_OP_USB_INIT
+from ...protocol.op_usb_init      import HF_OP_USB_INIT, decode_op_status_job_map, list_available_cores
 from ...protocol.op_usb_shutdown  import HF_OP_USB_SHUTDOWN
 from ...protocol.op_hash          import HF_OP_HASH
 from ...protocol.op_nonce         import HF_OP_NONCE
@@ -189,6 +189,19 @@ class BaseRoutine(with_metaclass(ABCMeta, object)):
     if self.test_start is None:
       self.test_start = time.time()
 
+  def is_valid_nonce(self, this_job, nonce):
+    # check nonce
+    if self.deterministic:
+      return (nonce in this_job['solutions'])
+    else:
+      zerobits, regen_hash_expanded = check_nonce_work(this_job, nonce)
+      #self.printer(this_job)
+      #self.printer('req: ' + ''.join('{:02x}'.format(x) for x in int_to_lebytes(3184732951, 4)))
+      #self.printer('got: ' + ''.join('{:02x}'.format(x) for x in int_to_lebytes(nonce, 4)))
+      #self.printer(zerobits)
+      #self.printer(regen_hash_expanded)
+      return (zerobits >= self.search_difficulty)
+
   def process_op_nonce(self, op_nonce):
     # calculate hashrate here
     self.calculate_hashrate()
@@ -204,13 +217,8 @@ class BaseRoutine(with_metaclass(ABCMeta, object)):
         core = this_work['core']
         this_core = self.get_core(die, core)
         # check nonce
-        valid_nonce = False
-        if self.deterministic:
-          valid_nonce = (nonce.nonce in this_job['solutions'])
-        else:
-          zerobits, regen_hash_expanded = check_nonce_work(this_job, nonce.nonce)
-          valid_nonce = (zerobits >= self.search_difficulty)
-        if valid_nonce:
+        if self.is_valid_nonce(this_job, nonce.nonce):
+          # start timing hashrate
           if self.hash_rate_start is None:
             self.hash_rate_start = time.time()
           # hashes
@@ -270,7 +278,8 @@ class BaseRoutine(with_metaclass(ABCMeta, object)):
     this_die['temperature']   = op_status.monitor_data.die_temperature
     this_die['core_voltage']  = op_status.monitor_data.core_voltage_main
     # op_status message
-    #self.printer("OP_STATUS die: %d active: %s pending: %s" % (die, this_die['active'], this_die['pending']))
+    if this_die['active'] is not 96:
+      self.printer("OP_STATUS die: %d active: %s pending: %s" % (die, this_die['active'], this_die['pending']))
 
   def process_op_settings(self, op_settings):
     self.printer("Got OP_SETTINGS")
@@ -279,7 +288,7 @@ class BaseRoutine(with_metaclass(ABCMeta, object)):
       self.dies[x]['frequency'] = op_settings.settings.die[x].frequency
       self.dies[x]['voltage'] = op_settings.settings.die[x].voltage
 
-  def action_op_hash(self, die, core):
+  def get_job(self, die, core):
     this_die  = self.get_die(die)
     this_core = self.get_core(die, core)
     # current sequence
@@ -288,9 +297,19 @@ class BaseRoutine(with_metaclass(ABCMeta, object)):
     if self.deterministic:
       # get deterministic job
       job = det_job(sequence)
+      return job
     else:
       # get random job
       job = rand_job(self.rndsrc)
+      return job
+
+  def action_op_hash(self, die, core):
+    this_die  = self.get_die(die)
+    this_core = self.get_core(die, core)
+    # current sequence
+    sequence = this_die['sequence']
+    # get job
+    job = self.get_job(die, core)
     # generate OP_HASH
     op_hash = HF_OP_HASH(die, core, sequence, prepare_hf_hash_serial(job, self.search_difficulty))
     # generate work

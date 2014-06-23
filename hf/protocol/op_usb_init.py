@@ -134,3 +134,92 @@ class HF_OP_USB_INIT(HF_Frame):
     if hasattr(self, 'config'):
       string += "{0}".format(self.config)
     return string
+
+###
+# Coremap
+###
+
+def dice_up_coremap(lebytes, dies, cores):
+  assert len(lebytes) % 4 == 0
+  assert 8 * len(lebytes) >= dies * cores
+  assert dies > 0 and cores > 0
+  die_modulus = 2 ** cores
+  global_bitmap = lebytes_to_int(lebytes)
+  die_coremaps = []
+  for die in range(dies):
+    single_die_map = coremap_array(global_bitmap % die_modulus, cores)
+    die_coremaps = [single_die_map] + die_coremaps
+    global_bitmap = global_bitmap >> cores
+  return die_coremaps
+
+def coremap_array(die_bitmap, cores):
+  result = []
+  mask = 0x1
+  for i in range(cores):
+    if die_bitmap & mask > 0:
+      result = result + [1]
+    else:
+      result = result + [0]
+    mask = mask << 1
+  return result
+
+def display_cores_by_G1_location(ca, printer):
+  for line in display_cores_by_G1_location_lines(ca):
+    printer(line)
+
+def display_cores_by_G1_location_lines(ca):
+  def I(yesno):
+    if yesno > 0:
+      return 'x'
+    else:
+      return ' '
+  def NI(yesno):
+    if yesno > 0:
+      return 'X'
+    else:
+      return ' '
+  assert len(ca) == 96
+  return ["".join([NI(ca[95]),  I(ca[74]), NI(ca[73]),  I(ca[53]), NI(ca[52]),  I(ca[33]), NI(ca[32]),  I(ca[11]), NI(ca[10])]),
+      "".join([ I(ca[94]), NI(ca[75]),  I(ca[72]), NI(ca[54]),  I(ca[51]), NI(ca[34]),  I(ca[31]), NI(ca[12]),  I(ca[9])]),
+      "".join([NI(ca[93]),  I(ca[76]), NI(ca[71]),  I(ca[55]), NI(ca[50]),  I(ca[35]), NI(ca[30]),  I(ca[13]), NI(ca[8])]),
+      "".join([ I(ca[92]), NI(ca[77]),  I(ca[70]), NI(ca[56]),  I(ca[49]), NI(ca[36]),  I(ca[29]), NI(ca[14]),  I(ca[7])]),
+      "".join([NI(ca[91]),  I(ca[78]), NI(ca[69]),  I(ca[57]), NI(ca[48]),  I(ca[37]), NI(ca[28]),  I(ca[15]), NI(ca[6])]),
+      "".join([ I(ca[90]), NI(ca[79]),  I(ca[68]), NI(ca[58]),  I(ca[47]), NI(ca[38]),  I(ca[27]), NI(ca[16]),  I(ca[5])]),
+      "".join([NI(ca[89]),  I(ca[80]), NI(ca[67]),  I(ca[59]), NI(ca[46]),  I(ca[39]), NI(ca[26]),  I(ca[17]), NI(ca[4])]),
+      "".join([ I(ca[88]), NI(ca[81]),  I(ca[66]), NI(ca[60]),  I(ca[45]), NI(ca[40]),  I(ca[25]), NI(ca[18]),  I(ca[3])]),
+      "".join([NI(ca[87]),  I(ca[82]), NI(ca[65]),  I(ca[61]), NI(ca[44]),  I(ca[41]), NI(ca[24]),  I(ca[19]), NI(ca[2])]),
+      "".join([ I(ca[86]), NI(ca[83]),  I(ca[64]), NI(ca[62]),  I(ca[43]), NI(ca[42]),  I(ca[23]), NI(ca[20]),  I(ca[1])]),
+      "".join([NI(ca[85]),  I(ca[84]), NI(ca[63]),      'O',          'O',        'O', NI(ca[22]),  I(ca[21]), NI(ca[0])])]
+
+# Fix: This really needs test code and documentation.  Make sure it
+#      works for future designs as well as G1.
+def decode_op_status_job_map(jobmap, cores):
+  assert 8 * len(jobmap) <= 2 * cores
+  bitmap = lebytes_to_int(jobmap)
+  active_map = [0] * cores
+  for i in range(cores):
+    if bitmap & (1 << 2*i) > 0:
+      active_map[i] = 1
+  pending_map = [0] * cores
+  for i in range(cores):
+    if bitmap & (1 << (2*i + 1)) > 0:
+      pending_map[i] = 1
+  return [active_map, pending_map]
+
+# Fix: Remove this if we don't need it.
+# Find empties: takes core list like [0,1,0,0,1...] and converts to
+# dictionary in which each key is an empty slot.
+def core_list_to_dict(corelist):
+  empties = {}
+  for i in range(len(corelist)):
+    if corelist[i] == 0:
+      empties[i] = 1
+  return empties
+
+# Fix: cores -> slots
+def list_available_cores(corelist):
+  empties = []
+  for i in range(len(corelist)):
+    if corelist[i] == 0:
+      empties.append(i)
+  return empties
