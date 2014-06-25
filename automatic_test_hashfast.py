@@ -47,8 +47,8 @@ MOC=False
 REFERENCE_CLOCK = 25
 
 #TODO: "learn" the current prefix from the scanner as the script runs on the test machine
-SERIAL_PREFIX = "PEPPER1-"
-DATA_STORE    = "Pepper"
+SERIAL_PREFIX = "HASHFAST-"
+DATA_STORE    = "HashFast"
 
 #Bus 002 Device 020: ID 297c:0001  
 USBID_HF_VID=0x297c

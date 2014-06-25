@@ -1,5 +1,0 @@
-miner.stderr
-gmon.out
-
-# Ignore cgminer_compile_profile output
-cgminer_*.txt
