@@ -37,7 +37,7 @@ from subprocess import Popen, PIPE
 import struct
 import shutil
 
-pathlist = [".", "..", os.path.join("..", "utils")]
+pathlist = [".", ".."]
 os.environ["PATH"] += os.pathsep + os.pathsep.join(pathlist)
 
 # HashFast Miner: ID 297c:0001
@@ -70,10 +70,10 @@ if (platform.machine() not in ["x86_64", "i686", "armv6l"]):
     print ("Host machine architecture could not be determined or not supported.  Detected '%s'." % platform.machine())
     exit(1)
 
-READSERIAL = os.path.join(platform.machine(), "readserial")
-HFUPDATE = os.path.join(platform.machine(), "hfupdate")
-ENTERLOADER = os.path.join(platform.machine(), "enterloader")
-LSUSB="lsusb"
+READSERIAL=shutil.which("readserial")
+HFUPDATE=shutil.which("hfupdate")
+ENTERLOADER=shutil.which("enterloader")
+LSUSB=shutil.which("lsusb")
 
 # HashFast uC HFU hex file for use with hfupdate
 UC_HFU_FILE=os.path.join(FIRMWARE_DIR,'uc3.cropped.hfu')

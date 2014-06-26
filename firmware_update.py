@@ -51,7 +51,7 @@ from subprocess import Popen, PIPE
 import struct
 import shutil
 
-pathlist = [".", "..", os.path.join("..", "utils")]
+pathlist = [".", ".."]
 os.environ["PATH"] += os.pathsep + os.pathsep.join(pathlist)
 
 # HashFast Miner: ID 297c:0001  
