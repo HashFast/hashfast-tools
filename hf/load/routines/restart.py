@@ -35,7 +35,7 @@ from usb.core import USBError
 
 from ..hf import Send, Receive
 from ..hf import HF_Parse, Garbage
-from ..hf import SHUTDOWN
+from ..hf import INIT, SHUTDOWN
 from ..hf import rand_job, det_job
 from ..hf import check_nonce_work, sequence_a_leq_b
 
@@ -54,13 +54,30 @@ from ...protocol.op_fan           import HF_OP_FAN
 
 from .base import BaseRoutine
 
-class ThermalRoutine(BaseRoutine):
+class RestartRoutine(BaseRoutine):
 
   def initialize(self):
     self.global_state = 'settings'
 
+  def restart(self):
+    self.printer('Restarting...')
+    self.defaults()
+    self.global_state = 'restart'
+
   def one_cycle(self):
     try:
+      ####################
+      # RESTART
+      ####################
+      if self.global_state == 'restart':
+        time.sleep(2)
+        self.talkusb(SHUTDOWN, None, 0)
+        time.sleep(2)
+        self.talkusb(INIT, None, 0)
+        time.sleep(2)
+        self.global_state = 'settings'
+        return True
+
       # Fix: Every time we send, we want also to receive (to make sure nothing
       #      deadlocks), so the send and receive objects should be combined.
       # Fix: Do we want to have a delay in here or some sort of select() like thing?
@@ -194,18 +211,23 @@ class ThermalRoutine(BaseRoutine):
 
     except KeyboardInterrupt:
       self.end()
+      self.report_hashrate()
       return False
 
     except USBError as e:
       #e.errno
       self.printer("USB Error: (%s, %s, %s)" % (sys.exc_info()[0], sys.exc_info()[1], sys.exc_info()[2]))
-      self.end()
-      return False
+      self.restart()
+      return True
+
+    except HF_NotConnectedError as e:
+      self.restart()
+      return True
 
     except HF_Thermal:
       self.printer("Thermal!: (%s, %s, %s)" % (sys.exc_info()[0], sys.exc_info()[1], sys.exc_info()[2]))
-      #self.end()
-      return True
+      self.end()
+      return False
 
     except:
       self.printer("Generic exception handler: (%s, %s, %s)" % (sys.exc_info()[0], sys.exc_info()[1], sys.exc_info()[2]))

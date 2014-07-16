@@ -33,6 +33,10 @@ import usb.util
 import sys
 import time
 
+from hf.errors   import HF_NotConnectedError
+from hf.usb.util import USBID_HF_VID, USBID_HFU_VID, USBID_DFU_VID
+from hf.usb.util import USBID_HF_PID, USBID_HFU_PID, USBID_DFU_PID
+
 HF_CTRL_DEVICE_NOT_FOUND     = 'HFCtrlDevice Not Found'
 HF_CTRL_DEVICE_FOUND         = 'HFCtrlDevice Found!'
 
@@ -207,7 +211,7 @@ class HFCtrlSerial():
     string += " ".join('{:02x}'.format(x) for x in self.serial[8:-4])
     string += "\n"
     return string
-  def pretty_str(self):
+  def hfserial(self):
     string  = "HF::"
     string += "".join('{:02x}'.format(x) for x in self.serial[8:-4])
     string += "::FH"
@@ -400,28 +404,42 @@ class HFCtrlCoreASICStatus():
     string += "ASIC Nonces:       {}\n".format(self.asic_nonces)
     return string
 
+class HFCtrlDebugBuffer():
+  def __init__(self, usbBuffer):
+    if len(usbBuffer):
+      self.stream                 = usbBuffer
+    else:
+      self.stream                 = []
+  def append(self, usbBuffer):
+    if usbBuffer[0] is not 0:
+      self.stream.extend(usbBuffer)
+      return True
+    else:
+      return False
+  def __str__(self):
+    string  = "HFCtrlDebugBuffer\n"
+    string += "".join('{:c}'.format(x) for x in self.stream)
+    return string;
+
 class HFCtrlDevice():
   def __init__(self, idVendor=None, idProduct=None):
-    try:
-      # HashFast idVendor
-      if idVendor is None:
-        idVendor = 0x297c
-      # HashFast idProduct
-      if idProduct is None:
-        idProduct = 0x0001
-      # find our device
-      self.dev = usb.core.find(idVendor=idVendor, idProduct=idProduct)
-      # was it found?
-      if self.dev is None:
-        raise ValueError('Device not found')
-      # set the active configuration. With no arguments, the first
-      # configuration will be the active one
-      #self.dev.set_configuration()
-      # get an endpoint instance
-      #self.cfg = self.dev.get_active_configuration()
-      #self.intf = self.cfg[(0,0)]
-    except:
-      print("USBCtrl Error")
+    # HashFast idVendor
+    if idVendor is None:
+      idVendor = USBID_HF_VID
+    # HashFast idProduct
+    if idProduct is None:
+      idProduct = USBID_HF_PID
+    # find our device
+    self.dev = usb.core.find(idVendor=idVendor, idProduct=idProduct)
+    # was it found?
+    if self.dev is None:
+      raise HF_NotConnectedError('HF Device not found in Application Mode')
+    # set the active configuration. With no arguments, the first
+    # configuration will be the active one
+    #self.dev.set_configuration()
+    # get an endpoint instance
+    #self.cfg = self.dev.get_active_configuration()
+    #self.intf = self.cfg[(0,0)]
 
   ##
   # information about the connected device
@@ -531,6 +549,19 @@ class HFCtrlDevice():
     return HFCtrlPower(ret)
 
   ##
+  # set power
+  ##
+  def power_set(self, module, power):
+    module = int(module)
+    if power:
+      power = int(0x0001)
+    else:
+      power = int(0x0000)
+    request_type = LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE
+    ret = self.dev.ctrl_transfer(request_type, HF_USBCTRL_POWER, power, module, None)
+    # TODO verify
+
+  ##
   # set voltage
   ##
   def voltage_set(self, module, die, mvolts):
@@ -608,13 +639,20 @@ class HFCtrlDevice():
   #
   ##
   def debug_buffer(self):
-    pass
+    request_type = LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE
+    ret = self.dev.ctrl_transfer(request_type, HF_USBCTRL_DEBUG_BUFFER, 0x0000, 0x0000, HF_CTRL_TIMEOUT)
+    return HFCtrlDebugBuffer(ret)
 
   ##
   #
   ##
   def debug_stream(self):
-    pass
+    request_type = LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE
+    #ret = self.dev.ctrl_transfer(request_type, HF_USBCTRL_DEBUG_STREAM, 0x0000, 0x0000, HF_CTRL_TIMEOUT)
+    debug = HFCtrlDebugBuffer(bytearray())
+    while debug.append(self.dev.ctrl_transfer(request_type, HF_USBCTRL_DEBUG_STREAM, 0x0000, 0x0000, HF_CTRL_TIMEOUT)):
+      pass
+    return debug
 
   ##
   #

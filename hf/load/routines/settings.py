@@ -33,13 +33,13 @@ from collections import deque
 
 from usb.core import USBError
 
-from ..hf import HF_Error, HF_Thermal
 from ..hf import Send, Receive
 from ..hf import HF_Parse, Garbage
 from ..hf import SHUTDOWN
 from ..hf import rand_job, det_job
 from ..hf import check_nonce_work, sequence_a_leq_b
 
+from ...errors                    import HF_Error, HF_Thermal, HF_InternalError, HF_NotConnectedError
 from ...util                      import with_metaclass, int_to_lebytes, lebytes_to_int
 from ...protocol.frame            import HF_Frame, opcodes, opnames
 from ...protocol.op_settings      import HF_OP_SETTINGS, hf_settings, hf_die_settings
@@ -59,6 +59,10 @@ class SettingsRoutine(BaseRoutine):
   def initialize(self):
     self.global_state = 'setup'
     self.op_settings = HF_OP_SETTINGS.forValues(settings=hf_settings())
+
+  def set_reference(self, ref):
+    self.op_settings.settings.ref_frequency = ref
+    self.global_state = 'setup'
 
   def setup(self, die, freq, volt):
     assert die < 4

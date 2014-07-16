@@ -31,13 +31,13 @@ from abc import ABCMeta, abstractmethod
 
 from collections import deque
 
-from ..hf import HF_Error, HF_Thermal
 from ..hf import Send, Receive
 from ..hf import HF_Parse, Garbage
 from ..hf import SHUTDOWN
 from ..hf import rand_job, det_job, known_job
 from ..hf import check_nonce_work, sequence_a_leq_b, prepare_hf_hash_serial
 
+from ...errors                    import HF_Error, HF_Thermal, HF_InternalError, HF_NotConnectedError
 from ...util                      import with_metaclass, int_to_lebytes, lebytes_to_int, reverse_every_four_bytes
 from ...protocol.frame            import HF_Frame, opcodes, opnames
 from ...protocol.op_settings      import HF_OP_SETTINGS, hf_settings, hf_die_settings
@@ -72,13 +72,20 @@ class BaseRoutine(with_metaclass(ABCMeta, object)):
     self.printer = printer
     self.deterministic = deterministic
 
-    self.max_die = 4
+    # call defults
+    self.defaults()
+
+    # call user initialize
+    self.initialize()
+
+  def defaults(self):
+    self.max_die = 4*5
     self.max_cores_per_die = 96
 
     self.cores_per_die = 0
     self.number_of_die = 0
 
-    self.op_usb_init_delay = 5.0
+    self.op_usb_init_delay = 12
     self.last_op_usb_init_sent = 0
 
     # test stats, hash rate stats, search difficulty, default unknown global state
@@ -95,8 +102,8 @@ class BaseRoutine(with_metaclass(ABCMeta, object)):
 
     # parser, transmitter, receiver
     self.parser = HF_Parse()
-    self.transmitter = Send(talkusb)
-    self.receiver = Receive(talkusb)
+    self.transmitter = Send(self.talkusb)
+    self.receiver = Receive(self.talkusb)
 
     # setup stats
     self.stats = {'hashes':0, 'hashrate':0, 'nonces':0, 'lhw':0, 'dhw':0, 'chw':0}
@@ -111,10 +118,7 @@ class BaseRoutine(with_metaclass(ABCMeta, object)):
     self.cores= [{'core':i,'sequence':0, 'work':{}, 'hashes':0, 'hashrate':0, 'nonces':0, 'lhw':0, 'dhw':0} 
                   for i in range(self.max_die*self.max_cores_per_die)]
     for core in self.cores:
-      core['work'] = deque([])
-
-    # call user initialize
-    self.initialize()
+      core['work'] = deque([])    
 
   @abstractmethod
   def initialize(self):
@@ -148,7 +152,7 @@ class BaseRoutine(with_metaclass(ABCMeta, object)):
           if moving_elapsed > self.moving_interval:
             moving = {'elapsed':elapsed, 'hashes':this_die['hashes'], 'nonces':this_die['nonces'], 'lhw':this_die['lhw'], 'dhw':this_die['dhw'],
                                          'hashrate':0,                'noncerate':0,               'lhwrate':0,           'dhwrate':0 }
-            moving_hashes       =  moving['hashes'] - last_moving['hashes']
+            moving_hashes       = moving['hashes'] - last_moving['hashes']
             moving['hashrate']  = moving_hashes / moving_elapsed
             moving['noncerate'] = moving['nonces'] - last_moving['nonces']
             moving['lhwrate']   = moving['lhw']    - last_moving['lhw']
@@ -171,9 +175,9 @@ class BaseRoutine(with_metaclass(ABCMeta, object)):
           .format((this_die['hashrate']/10**9), this_die['nonces'], this_die['die'], self.moving_interval, (this_die['moving'][-1]['hashrate']/10**9)))
 
   def report_errors(self):
-    self.printer(  "Errors: LHW: {0:d}   DHW: {1:d}   CHW: {2:d}".format(self.stats['lhw'], self.stats['dhw'], self.stats['chw']))
+    self.printer(  "Errors:    LHW: {0:d}   DHW: {1:d}   CHW: {2:d}".format(self.stats['lhw'], self.stats['dhw'], self.stats['chw']))
     for this_die in self.dies:
-      self.printer("Die {3:d}, Temp: {4:f}   LHW: {0:d}   DHW: {1:d}   CHW: {2:d}".format(this_die['lhw'], this_die['dhw'], this_die['chw'], this_die['die'], this_die['temperature']))
+      self.printer("Die {3:d}, LHW: {0:d}   DHW: {1:d}   CHW: {2:d}  T: {4:f} V: {5:f}".format(this_die['lhw'], this_die['dhw'], this_die['chw'], this_die['die'], this_die['temperature'], this_die['core_voltage']))
 
   def process_op_usb_init(self, op_usb_init):
     # parse OP_USB_INIT
@@ -181,6 +185,8 @@ class BaseRoutine(with_metaclass(ABCMeta, object)):
     assert self.max_die >= self.number_of_die
     self.cores_per_die = op_usb_init.cores_per_die
     assert self.max_cores_per_die >= self.cores_per_die
+    # remove unused die
+    self.dies = self.dies[:self.number_of_die]
     # print OP_USB_INIT
     self.printer(str(op_usb_init))
     # check operation status
@@ -237,13 +243,13 @@ class BaseRoutine(with_metaclass(ABCMeta, object)):
           self.stats['lhw']     += 1
           this_die['lhw']       += 1
           this_core['lhw']      += 1
-          #self.printer("BAD NNC (%08x) die: %d core: %d seq: %d" % (nonce.nonce, die, core, nonce.sequence))
+          #self.printer("!BAD NNC (%08x) die: %d core: %d seq: %d" % (nonce.nonce, die, core, nonce.sequence))
 
       else:
         # sequence number corrupted
         self.stats['chw']       += 1
         this_die['chw']         += 1
-        self.printer("CORRUPTED SEQ (%08x) die: %d seq: %d" % (nonce.nonce, die, nonce.sequence))
+        #self.printer("  CRPT SEQ (%08x) die: %d seq: %d" % (nonce.nonce, die, nonce.sequence))
 
   def process_op_status(self, op_status):
     die = op_status.chip_address
@@ -349,7 +355,7 @@ class BaseRoutine(with_metaclass(ABCMeta, object)):
     op_usb_shutdown = HF_Frame({'operation_code': opcodes['OP_USB_SHUTDOWN'], 'hdata': 2})
     self.transmitter.send(op_usb_shutdown.framebytes)
     self.printer("Sent OP_USB_SHUTDOWN.")
-    self.talkusb(SHUTDOWN, None, 0);
+    self.talkusb(SHUTDOWN, None, 0)
     return False
 
   def __del__(self):

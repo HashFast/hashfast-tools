@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#! /usr/bin/env python3
 
 # Copyright (c) 2014, HashFast Technologies LLC
 # All rights reserved.
@@ -25,198 +25,78 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import sys
-import os
-import time
-import platform
 import argparse
 
-import subprocess
-import traceback
-from subprocess import Popen, PIPE
-import struct
-import shutil
+def parse_args():
+  parser = argparse.ArgumentParser(description='Update HashFast modules. By default loads the latest release firmware.')
+  parser.add_argument('-l', '--list',    dest='list',    action='store_true', help='list firmware')
+  parser.add_argument('-r', '--release', dest='release', type=str, help='specific release to load')
+  # debug
+  parser.add_argument('-d', '--debug',   dest='debug',   action='store_true', help='load debug firmware')
+  parser.add_argument('-b', '--build',   dest='build',   type=str, help='specific build to load')
+  return parser.parse_args()
 
-pathlist = [".", ".."]
-os.environ["PATH"] += os.pathsep + os.pathsep.join(pathlist)
+if __name__ == '__main__':
+  # parse args before other imports
+  args = parse_args()
 
-# HashFast Miner: ID 297c:0001
-USBID_HF_VID=0x297c
-USBID_HF_PID=0x0001
+import sys
+from hf.usb             import usbctrl
+from hf.usb             import util
+from hf.firmware.update import HF_Updater
 
-# HFU Boot Loader: ID 297c:8001
-USBID_HFU_PID=0x8001
+def printme(msg):
+  print(msg)
 
-UC_PART='at32uc3b0512'
+def main(args):
+  if args.debug:
+    print("WARNING - Debug builds are experimental!")
+    print("HashFast is not responsible for damage resulting from debug builds.")
 
-parser = argparse.ArgumentParser(description='HashFast Firmware Updater.')
-parser.add_argument('--confirm-reload', action='store_true', default=False,
-                   help='detect existing serial and confirm reload of firmware')
-parser.add_argument('--firmware', action='store', default='.',
-                   help='path to the firmware update directory')
-args = parser.parse_args()
+  updater = HF_Updater()
+  if args.list:
+    # list releases/builds
+    if args.debug:
+      updater.list_debug_builds()
+    else:
+      updater.list_release_firmwares()
 
-CONFIRM_RELOAD = args.confirm_reload
-FIRMWARE_DIR = args.firmware
+  else:
+    # doing a load, wait for a valid HashFast device
+    dev = util.poll_hf_device()
+    if dev is util.USB_DEV_DFU:
+      # found a device that needs a bootloader
+      # if no release specified, then latest will be loaded
+      dfu = updater.fetch_release_bootloader(args.release)
+      updater.load_firmware_dfu(dfu)
+      # wait for device to reboot
+      util.poll_hf_device()
 
-print ("confirm is ", CONFIRM_RELOAD)
-print ("FIRMWARE_DIR is ", FIRMWARE_DIR)
+    elif dev is util.USB_DEV_HFU:
+      # found device in loader mode
+      updater.enter_app()
 
-if (not os.path.isdir(FIRMWARE_DIR)):
-    print ("Specified firmware path '%s' is not a directory." % FIRMWARE_DIR)
-    exit(1)
+    # load firmware
+    if args.debug or args.build:
+      if args.build:
+        updater.dev = usbctrl.poll_hf_ctrl_device(printer=printme)
+        updater.enumerate_modules()
+        updater.enter_loader()
+        hfu = updater.fetch_debug_build(args.build)
+        updater.load_firmware_hfu(hfu)
+        updater.enter_app()
+      else:
+        raise HF_UpdateError("You must specify a debug build with --build BUILD")
 
-if (platform.machine() not in ["x86_64", "i686", "armv6l"]):
-    print ("Host machine architecture could not be determined or not supported.  Detected '%s'." % platform.machine())
-    exit(1)
-
-READSERIAL=shutil.which("readserial")
-HFUPDATE=shutil.which("hfupdate")
-ENTERLOADER=shutil.which("enterloader")
-LSUSB=shutil.which("lsusb")
-
-# HashFast uC HFU hex file for use with hfupdate
-UC_HFU_FILE=os.path.join(FIRMWARE_DIR,'uc3.cropped.hfu')
-print ("UC_HFU_FILE at '%s'." % UC_HFU_FILE)
-
-print ("READSERIAL found at '%s'." % READSERIAL)
-print ("HFUPDATE found at '%s'." % HFUPDATE)
-print ("ENTERLOADER found at '%s'." % ENTERLOADER)
-
-def enterloader():
-    subprocess.check_call([ENTERLOADER])
-
-def enumerate_modules():
-    try:
-        result = subprocess.check_output([HFUPDATE, '-E'])
-    except subprocess.CalledProcessError as e:
-        return 0
-
-    resultStr = str(result)
-
-    num_modules = 0
-    for mod_num in range(0,5):
-        search_string = "module %d version" % mod_num
-        if search_string in resultStr:
-            num_modules = mod_num + 1
-    return num_modules
-
-def read_serial_hfu():
-    # TODO
-    return None
-
-def read_serial_hf():
-    print ("Reading serial number from module.")
-    try:
-        result = subprocess.check_output([READSERIAL])
-        result = result.rstrip()
-    except subprocess.CalledProcessError as e:
-        return None
-    # TODO: sanity check input for "HF:0x32n:FH"
-    print ("Got back this serial: '%s'" % result)
-    return result
-
-def load_firmware_hfu(hex_file, num_modules=1):
-    for module in range(0,num_modules):
-        print("Updating module %d..." % module)
-        subprocess.check_call([HFUPDATE, '-m%d' % module, hex_file])
-    return
-
-def restart_to_hf_mode():
-    subprocess.check_call([HFUPDATE, '-r'])
-    return
-
-def wait_for_device(device_list, timeout=None):
-    tries=0
-    while True:
-        for dev_type in device_list:
-            try:
-                result = subprocess.check_output([LSUSB, '-d', "%#0.2x:%#0.2x" % (dev_type[0], dev_type[1])])
-            except subprocess.CalledProcessError as e:
-                if e.returncode == 1:
-                    tries += 1
-                    if timeout and tries == timeout:
-                        raise Exception("Error: timeout.  Failed to find device.")
-                    time.sleep(1)
-                    continue
-                else:
-                    raise Exception("Error: error calling lsusb")
-            return dev_type
-
-def firmware_updater():
-
-    all_devices =[(USBID_HF_VID, USBID_HF_PID), (USBID_HF_VID, USBID_HFU_PID)]
-    try:
-        device = wait_for_device(all_devices, 1)
-    except Exception:
-        print("Please connect HashFast device to update.")
-        device = wait_for_device(all_devices)
-
-    time.sleep(1)
-
-    if (device == (USBID_HF_VID, USBID_HF_PID)):
-        serial=read_serial_hf()
-        if (CONFIRM_RELOAD and serial):
-            serial = "HF::" + str(serial) + "::FH"
-            print ('Board Serial number is: "%s".' % serial)
-            print ('Do you want to RELOAD this board?  ("YES" or "NO")')
-            response = sys.stdin.readline().rstrip()
-            if not response.lower() in ["yes", "y"]:
-                print ('Cancelling...')
-                sys.exit(1)
-        print("Entering Boot Loader...")
-        enterloader()
-        time.sleep(3)
-
-    print("Enumerating modules...")
-    num_modules = enumerate_modules()
-    if num_modules == 0:
-        print ('Error enumerating modules.  Cancelling...')
-        sys.exit(1)
-
-    time.sleep(1)
-
-    print("Found %d modules." % num_modules)
-    print("Loading Firmware...")
-    load_firmware_hfu(UC_HFU_FILE, num_modules)
-
-    restart_to_hf_mode()
-
-    wait_for_device([(USBID_HF_VID, USBID_HF_PID)], 10)
-
-    print
-    print ("***FIRMWARE UPDATE COMPLETE")
-    print
-
-    return
-
-def check_deps():
-    dep_list = [("UC HFU File", UC_HFU_FILE), ("readserial utility", READSERIAL), ("hfupdate utility", HFUPDATE), ("Enterloader utility", ENTERLOADER)]
-    for dep in dep_list:
-        if (dep[1] == None or not os.path.isfile(dep[1])):
-            print ("Dependency '%s' not found.  Cannot run." % dep[0])
-            exit(1)
-
+    else:
+      # if no release specified, then latest will be loaded
+      updater.dev = usbctrl.poll_hf_ctrl_device(printer=printme)
+      updater.enumerate_modules()
+      updater.enter_loader()
+      # if no release specified, then latest will be loaded
+      hfu = updater.fetch_release_firmware(args.release)
+      updater.load_firmware_hfu(hfu)
+      updater.enter_app()
 
 if __name__ == "__main__":
-
-    print
-    check_deps()
-
-    try:
-        print("HashFast Firmware Updater")
-        print
-        firmware_updater()
-        print
-        print("HashFast Firmware Updater Completed")
-        exit(0)
-    except Exception as e:
-        traceback.print_exc(file=sys.stdout)
-        print(e)
-        print("Firmware Update had an error.  Please retry or report to HashFast Support.")
-        exit(1)
-    except KeyboardInterrupt:
-        print
-        print("HashFast Firmware Update Cancelled.  Exiting.")
-        exit(1)
-
+   main(args)

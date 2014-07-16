@@ -48,7 +48,6 @@ REFERENCE_CLOCK = 25
 
 #TODO: "learn" the current prefix from the scanner as the script runs on the test machine
 SERIAL_PREFIX = "PEPPER1-"
-DATA_STORE    = "Pepper"
 
 #Bus 002 Device 020: ID 297c:0001  
 USBID_HF_VID=0x297c
@@ -168,7 +167,7 @@ def hfload_test(hash_clock, cycles):
 def automatic_test(hash_clock, voltage, cycles, firmware):
 
 
-    if not MOC and firmware != None:
+    if not MOC and firmware != "NONE":
         print("Connect module and wait for firmware load to complete.")
         subprocess.check_output(['./firmware_update.py', '--firmware', firmware])
         print("Firmware loaded.")
@@ -228,10 +227,8 @@ def main(argv):
                        help='Default voltage to test module at.')
     parser.add_argument('--cycles', action='store', default='5000',
                        help='Cycles to run test for.')
-    parser.add_argument('--firmware', action='store',
-                       help='path to firmware release directory.')
-    parser.add_argument('--data', action='store',
-                       help='path to data directory.')
+    parser.add_argument('--firmware', action='store', default='NONE',
+                       help='path to firmware image to load.')
     parser.add_argument('--moc', action='store_true',
                        help='Test w/o an actual module.')
     args = parser.parse_args()
@@ -243,26 +240,6 @@ def main(argv):
     print("serial: '%s'" % args.serial)
     print("hash_clock: '%s'" % args.hash_clock)
     print("voltage: '%s'" % args.voltage)
-
-    if args.firmware is not None:
-        print("firmware directory: '%s'" % args.firmware)
-    else:
-        print("Please specify a firmware directory.")
-        exit(1)
-
-    if not os.path.isdir(args.firmware):
-        print("Firmware directory does not exist.")
-        exit(1)
-
-    if args.data is not None:
-        print("data directory: '%s'" % args.data)
-    else:
-        print("Please specify a data output directory.")
-        exit(1)
-
-    if not os.path.isdir(args.data):
-        print("Data directory does not exist.")
-        exit(1)
 
     try:
         print("Beginning Board Load and Test")
@@ -307,8 +284,8 @@ def main(argv):
                      'cycles': int(args.cycles),
                      'firmware': args.firmware,
                     }
-        datawriter = boardlib.BoardData(args.data)
-        datawriter.Store(test_data, DATA_STORE)
+        datawriter = boardlib.BoardData('/home/netcom/test_results')
+        datawriter.Store(test_data, 'Pepper')
 
         print("Board Test Completed")
     except Exception as e:

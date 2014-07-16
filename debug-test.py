@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#!/usr/bin/env python3
 
 # Copyright (c) 2014, HashFast Technologies LLC
 # All rights reserved.
@@ -28,54 +28,75 @@
 import argparse
 
 def parse_args():
-  parser = argparse.ArgumentParser(description='Read and write various settings.')
-  parser.add_argument('-r', '--revision', dest='revision', type=int, default=3, help='HashFast board major revision number')
-  parser.add_argument('-d', '--read-die-settings', dest='read_die_settings', action='store_true', help='read die settings')
-  parser.add_argument('-w', '--write-die-settings', dest='write_die_settings', type=str, nargs=4, metavar=('DIE:mVLT@FRQ'), help='write die settings')
+  parser = argparse.ArgumentParser(description='Run a theoretical hashrate test.')
+  parser.add_argument('-c', '--clockrate', dest='clockrate', type=int, default=1, help='clockrate in MHz')
+  parser.add_argument('-d', '--deterministic', dest='deterministic', action='store_true', help='run a deterministic test')
   return parser.parse_args()
 
 if __name__ == '__main__':
   # parse args before other imports
   args = parse_args()
 
+import random
 import sys
-from hf.usb import usbbulk
+import time
+import threading
+
+from hf.usb  import usbctrl
+from hf.load import hf
 from hf.load import talkusb
-from hf.load.routines import settings
+from hf.load.routines import simple
+
+running = False
 
 def main(args):
-  # query device
-  dev = usbbulk.poll_hf_bulk_device()
-  print (dev.info())
-  print (dev.init())
-
-  # Fix: talkusb patch
-  talkusb.epr = dev.epr
-  talkusb.epw = dev.epw
-  #talkusb.talkusb(hf.INIT, None, 0)
+  global running
 
   def printmsg(msg):
     print(msg)
 
-  setter = settings.SettingsRoutine(talkusb.talkusb, 1, printmsg)
+  # init talkusb
+  talkusb.talkusb(hf.INIT, None, 0)
 
-  if args.read_die_settings:
-    setter.global_state = 'read'
-    while setter.one_cycle():
-      pass
+  # init the test
+  test = simple.SimpleRoutine(talkusb.talkusb, args.clockrate, printer=printmsg, deterministic=args.deterministic)
 
-  if args.write_die_settings is not None:
-    if args.revision is 3:
-      setter.set_reference(25)
-    else:
-      setter.set_reference(125)
-    die_settings = args.write_die_settings
-    for die_setting in die_settings:
-      die, setting = die_setting.split(':')
-      vlt, frq     = setting.split('@')
-      setter.setup(int(die), int(frq), int(vlt))
-    while setter.one_cycle():
-      pass
+  # debug stream
+  dthread = threading.Thread(target=debugstream, args={printmsg})
+  #dthread.daemon = True
+  running = True
+  dthread.start()
+
+  # thread
+  thread = threading.Thread(target=monitor, args={test})
+  #thread.daemon = True
+  running = True
+  thread.start()
+
+  # run the test
+  rslt = True
+  while rslt:
+    rslt = test.one_cycle()
+
+  running = False
+
+  print("All done!")
+
+def debugstream(printer):
+  # usb ctrl
+  dev = usbctrl.poll_hf_ctrl_device(printer=printer)
+  while running:
+    time.sleep(1)
+    debug = dev.debug_stream()
+    if len(debug.stream):
+      printer("\n{}".format(debug))
+
+def monitor(test):
+  while running:
+    time.sleep(4)
+    test.report_hashrate()
+    time.sleep(4)
+    test.report_errors()
 
 if __name__ == "__main__":
    main(args)

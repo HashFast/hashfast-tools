@@ -1,0 +1,33 @@
+
+The miner.py utility is used to connect to a stratum pool and mine on a HashFast device.
+
+miner requires pyusb.  To install it:
+  pip install --pre pyusb
+
+miner requires stratum.  To install it:
+  pip install stratum
+
+miner requires twisted.  To install it:
+  pip install twisted
+
+Put these into a file /etc/udev/rules.d/01-hashfast.rules:
+
+ATTRS{idVendor}=="297c", ATTRS{idProduct}=="0001", SUBSYSTEMS=="usb", ACTION=="add", MODE="0660", GROUP="plugdev”, ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTRS{idVendor}=="297c", ATTRS{idProduct}=="8001", SUBSYSTEMS=="usb", ACTION=="add", MODE="0660", GROUP="plugdev", ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTRS{idVendor}=="03eb", ATTRS{idProduct}=="2ff6", SUBSYSTEMS=="usb", ACTION=="add", MODE="0660", GROUP="plugdev", ENV{ID_MM_DEVICE_IGNORE}="1"
+
+RUNNING
+===========
+
+Start the tool with:
+$ ./miner.py -o POOL -p PORT -c CLOCKRATE -cu USER -cp PASSWORD
+
+To view other available settings:
+$ ./miner.py -h
+
+
+OPTIONAL
+===========
+
+Compile the native midstate extenstion with:
+$ cd hf/midstatec && make

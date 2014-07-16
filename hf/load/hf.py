@@ -32,6 +32,7 @@ from . import crc
 from . import sha256
 from . import job_library
 
+from ..errors                    import HF_Error, HF_Thermal, HF_InternalError, HF_NotConnectedError
 from ..util                      import with_metaclass, int_to_lebytes, lebytes_to_int, int_to_bebytes, bebytes_to_int, reverse_every_four_bytes
 from ..protocol.frame            import HF_Frame, opcodes, opnames
 from ..protocol.op_settings      import HF_OP_SETTINGS, hf_settings, hf_die_settings
@@ -62,15 +63,6 @@ SEND = 2
 RECEIVE = 3
 SEND_MAX = 4
 RECEIVE_MAX = 5
-
-class HF_Error(Exception):
-  pass
-
-class HF_Thermal(HF_Error):
-  pass
-
-class HF_InternalError(HF_Error):
-  pass
 
 # Fix: Might be less confusing to have a single object which can
 #      both send and receive -- and in the future we may want

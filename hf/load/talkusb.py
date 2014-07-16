@@ -33,6 +33,8 @@ import usb.util
 import sys
 import time
 
+from ..errors import HF_NotConnectedError
+
 INIT = 0
 SHUTDOWN = 1
 SEND = 2
@@ -42,10 +44,12 @@ RECEIVE_MAX = 5
 
 epr = None
 epw = None
+dev = None
 
 def talkusb_init():
   global epr
   global epw
+  global dev
 
   dev = None
   idVendor = None
@@ -61,7 +65,7 @@ def talkusb_init():
   dev = usb.core.find(idVendor=idVendor, idProduct=idProduct)
   # was it found?
   if dev is None:
-    raise ValueError('Device not found')
+    raise HF_NotConnectedError('Device not found')
   # set the active configuration. With no arguments, the first
   # configuration will be the active one
   #dev.set_configuration()
@@ -108,6 +112,16 @@ def talkusb_init():
     dev.detach_kernel_driver(intf)
     #print("Detached Kernel Driver")
 
+def talkusb_shutdown():
+  #dev.reset()
+  #usb.util.dispose_resources(dev)
+  global epr
+  global epw
+  global dev
+  dev = None
+  epr = None
+  epw = None
+
 def talkusb(action, usbBuffer, usbBufferLen):
   try:
     s = time.time()
@@ -123,7 +137,7 @@ def talkusb(action, usbBuffer, usbBufferLen):
       talkusb_init()
       return 0
     if action is SHUTDOWN:
-      talkusb_init()
+      talkusb_shutdown()
       return 0
     if action is SEND_MAX:
       return 64
@@ -144,7 +158,7 @@ def init():
 
 def shutdown():
   try:
-    talkusb_init()
+    talkusb_shutdown()
   except usb.core.USBError as e:
     # USB error numbers are negative
     #return e.errno

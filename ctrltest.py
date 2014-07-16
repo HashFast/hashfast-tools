@@ -42,6 +42,7 @@ def parse_args():
   parser.add_argument('-x', '--core-status',  dest='core_status', type=int, metavar='CORE', help='core status')
   parser.add_argument('-y', '--die-status',   dest='die_status',  type=int, metavar='DIE', help='die stats')
   parser.add_argument('-z', '--asic-status',  dest='asic_status', type=int, metavar='ASIC', help='asic status')
+  parser.add_argument('-s', '--debug-stream', dest='debug_stream',action='store_true', help='debug stream')
   return parser.parse_args()
 
 if __name__ == '__main__':
@@ -53,7 +54,7 @@ from hf.usb import usbctrl
 
 def main(args):
   # query device
-  dev = usbctrl.HFCtrlDevice()
+  dev = usbctrl.poll_hf_ctrl_device()
   print (dev.info())
   print (dev.status())
   config = dev.config()
@@ -74,7 +75,8 @@ def main(args):
     dev.name_set(name)
 
   if args.power is not None:
-    pass
+    power = args.power
+    dev.power_set(0, power)
 
   if args.reboot_app is not None:
     module = args.reboot_app
@@ -115,6 +117,9 @@ def main(args):
   if args.asic_status is not None:
     asic = args.asic_status
     print (dev.core_asic_status(asic))
+
+  if args.debug_stream:
+    print (dev.debug_stream())
 
 if __name__ == "__main__":
    main(args)

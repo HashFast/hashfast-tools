@@ -33,6 +33,10 @@ import usb.util
 import sys
 import time
 
+from hf.errors   import HF_NotConnectedError
+from hf.usb.util import USBID_HF_VID, USBID_HFU_VID, USBID_DFU_VID
+from hf.usb.util import USBID_HF_PID, USBID_HFU_PID, USBID_DFU_PID
+
 HF_USBBULK_INIT         = 0
 HF_USBBULK_SHUTDOWN     = 1
 HF_USBBULK_SEND         = 2
@@ -63,15 +67,15 @@ class HFBulkDevice():
   def __init__(self, idVendor=None, idProduct=None):
     # HashFast idVendor
     if idVendor is None:
-      idVendor = 0x297c
+      idVendor = USBID_HF_VID
     # HashFast idProduct
     if idProduct is None:
-      idProduct = 0x0001
+      idProduct = USBID_HF_PID
     # find our device
     self.dev = usb.core.find(idVendor=idVendor, idProduct=idProduct)
     # was it found?
     if self.dev is None:
-      raise ValueError('Device not found')
+      raise HF_NotConnectedError('HF Device not found in Application Mode')
 
   ##
   # information about the connected device

@@ -71,3 +71,30 @@ def reverse_every_four_bytes(bytelist):
         a.reverse()
         result = result + a
     return result
+
+
+# ScoutUserName - The full name of the FogBugz user the case creation or edit should be made as.
+# ScoutProject  - The Project that new cases should be created in (must be a valid project name).
+# ScoutArea     - The Area that new cases should go into (must be a valid area in the ScoutProject).
+# Description   - This is the unique string that identifies the particular crash that has just occurred.
+# Extra         - The details about this particular crash.
+# Email         - An email address to associate with the report, often the customer's email.
+def fogbugz_report(description, extra, project="Software", area="Test Support"):
+  username = 'AutoBug Tracking'
+  url      = 'https://hashfast.fogbugz.com/scoutSubmit.asp'
+  try:
+    # python 3
+    from urllib.parse   import urlencode
+    from urllib.request import urlopen
+    params = urlencode({'ScoutUserName':username, 'ScoutProject':project, 'ScoutArea':area, 'Description':description, 'Extra':extra})
+    data   = params.encode('ascii')
+    f      = urlopen(url, data)
+    return f.read()
+  except ImportError:
+    # python 2
+    from urllib         import urlencode
+    from urllib         import urlopen
+    params = urlencode({'ScoutUserName':username, 'ScoutProject':project, 'ScoutArea':area, 'Description':description, 'Extra':extra})
+    f      = urlopen(url, params)
+    return f.read()
+
