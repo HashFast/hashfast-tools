@@ -43,9 +43,9 @@ USBID_DFU_VID  = 0x03eb
 USBID_DFU_PID  = 0x2ff6
 USB_DEV_DFU    = (USBID_DFU_VID, USBID_DFU_PID)
 # dfu target
-UC_PART        = 'at32uc3b0512'
+UC_PART_BASE   = 'at32uc3b0'
 # all devices
-all_devices    = [USB_DEV_HF, USB_DEV_HFU, USB_DEV_DFU]
+all_devices    = [USB_DEV_HFU, USB_DEV_HF, USB_DEV_DFU]
 
 HF_DEVICE_NOT_FOUND     = 'HFDevice Not Found'
 HF_DEVICE_FOUND         = 'HFDevice Found!'
@@ -61,7 +61,7 @@ def poll_hf_device(devices=all_devices, intv=1, printer=noprint):
         idVendor  = device[0]
         idProduct = device[1]
         dev = usb.core.find(idVendor=idVendor, idProduct=idProduct)
-        if device is not None:
+        if dev is not None:
           printer(HF_DEVICE_FOUND)
           return device
       except:

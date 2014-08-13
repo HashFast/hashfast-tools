@@ -34,9 +34,8 @@ fi
 
 echo "CGMINER is \"$CGMINER\"."
 
-ARGS="--verbose -o ${POOL} -u ${WALLET} -p x -l 9 --hfa-hash-clock $SPEED"
+ARGS="--verbose -o ${POOL} -u ${WALLET} -p x -l 9 --hfa-fail-drop 0 --hfa-hash-audit --hfa-fan 100 --hfa-temp-overheat 110 --hfa-temp-target 0 --hfa-hash-clock $SPEED"
 echo "ARGS are \"$ARGS\"."
 
 echo "STARTING CGMINER"
 $CGMINER ${ARGS} 2> miner.stderr
-

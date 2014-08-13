@@ -24,6 +24,7 @@
 #define HF_LOADER_INTERFACE_ALTERNATE_SETTING        1
 #define HF_LOADER_EP_OUT                          0x02
 
+#define FLASH_SIZE_MAGIC   0x68669d31
 
 static const char banner[] =
     "hfupdate v0.1";
@@ -40,6 +41,7 @@ static const char usage[] =
     "    -e             reenumerate slaves\n"
     "    -E             reboot slaves into loader and reenumerate them\n"
     "    -m<module>     update specified module; module 0 has usb connection\n"
+    "    -f             force writing a file even if flash size check fails\n"
 #if defined(LIBUSBX_API_VERSION) && (LIBUSBX_API_VERSION >= 0x01000102)
     "    -p<port>       select device on specified port\n"
 #endif
@@ -120,6 +122,8 @@ int main(int argc, char *argv[]) {
     int interfaceClaimed;
     char *fileName;
     int targetModule;
+    unsigned int targetModuleSize;
+    int skipFlashCheck;
     int reenumerateSlaves;
     int dumpDebug;
     FILE *s;
@@ -128,6 +132,8 @@ int main(int argc, char *argv[]) {
     unsigned char *ptr;
     int transferred;
     unsigned int version;
+    unsigned int size;
+    unsigned int cmdsize;
     unsigned int mainVersion;
     unsigned int crc;
     unsigned int status;
@@ -140,6 +146,7 @@ int main(int argc, char *argv[]) {
 
     result = 0;
     usbInitialized = 0;
+    skipFlashCheck = 0;
     bus = -1;
 #if defined(LIBUSBX_API_VERSION) && (LIBUSBX_API_VERSION >= 0x01000102)
     port = -1;
@@ -151,6 +158,7 @@ int main(int argc, char *argv[]) {
     reboot = 0;
     rebootModule = 0xff;
     targetModule = 0;
+    targetModuleSize = 0;
     dev = NULL;
     s = NULL;
     fileName = NULL;
@@ -176,6 +184,9 @@ int main(int argc, char *argv[]) {
                 break;
             case 'm':
                 targetModule = atoi(&argv[i][2]);
+                break;
+            case 'f':
+                skipFlashCheck = 1;
                 break;
 #if defined(LIBUSBX_API_VERSION) && (LIBUSBX_API_VERSION >= 0x01000102)
             case 'p':
@@ -335,6 +346,7 @@ int main(int argc, char *argv[]) {
     for (i = 0; i <= slaveCount && result == 0; i++) {
         retries = 0;
         do {
+            usbBuffer[4] = 0;
             count = libusb_control_transfer(dev,
                                             LIBUSB_ENDPOINT_IN |
                                             LIBUSB_REQUEST_TYPE_VENDOR |
@@ -360,10 +372,10 @@ int main(int argc, char *argv[]) {
                               ((unsigned int) usbBuffer[6] << 8) |
                               ((unsigned int) usbBuffer[7] << 16) |
                               ((unsigned int) usbBuffer[8] << 24);
-                        printf("module %d version 0x%08x crc 0x%08x\n",
+                        printf("module %d version 0x%08x CRC 0x%08x\n",
                                i, (unsigned int) version, (unsigned int) crc);
                     } else
-                        printf("module %d version 0x%08x\n",
+                        printf("module %d version 0x%08x CRC invalid\n",
                                i, (unsigned int) version);
                 }
             } else {
@@ -374,6 +386,53 @@ int main(int argc, char *argv[]) {
         if (!(version & 0x80000000) && targetModule == i) {
             fprintf(stderr, "target module not in loader mode\n");
             result = 1;
+        }
+    }
+
+    for (i = 0; i <= slaveCount && result == 0; i++) {
+        retries = 0;
+        do {
+            count = libusb_control_transfer(dev,
+                                            LIBUSB_ENDPOINT_IN |
+                                            LIBUSB_REQUEST_TYPE_VENDOR |
+                                            LIBUSB_RECIPIENT_INTERFACE,
+                                            HF_LOADER_USB_FLASH_SIZE,
+                                            0x0000, /* value */
+                                            i, /* index */
+                                            usbBuffer,
+                                            8,
+                                            TIMEOUT);
+            if (count >= 8) {
+                size = usbBuffer[0] |
+                          ((unsigned int) usbBuffer[1] << 8) |
+                          ((unsigned int) usbBuffer[2] << 16) |
+                          ((unsigned int) usbBuffer[3] << 24);
+                if (size == 0) {
+                    printf("module %d not reporting size\n", i);
+                    sleep(1);
+                    continue;
+                } else {
+                    /* store the size of the target module for later */
+                    if (i == targetModule) {
+                        targetModuleSize = size;
+                    }
+                    printf("module %d size 0x%08x\n",
+                            i, (unsigned int) size);
+                }
+                cmdsize = usbBuffer[4] |
+                          ((unsigned int) usbBuffer[5] << 8) |
+                          ((unsigned int) usbBuffer[6] << 16) |
+                          ((unsigned int) usbBuffer[7] << 24);
+                printf("module %d flash cmd size 0x%08x\n",
+                        i, (unsigned int) cmdsize);
+            } else {
+                fprintf(stderr, "HF_LOADER_USB_FLASH_SIZE failed (%d)\n", count);
+                //result = 1;
+            }
+        } while (result == 0 && size == 0 && ++retries <= 1);
+        if (!(size & 0x80000000) && targetModule == i) {
+            //fprintf(stderr, "target module not in loader mode\n");
+            //result = 1;
         }
     }
 
@@ -432,6 +491,46 @@ int main(int argc, char *argv[]) {
         if (s == NULL) {
             fprintf(stderr, "failed to open file %s\n", fileName);
             result = 1;
+        } else {
+            /* read FLASH_SIZE from first 16 bytes of file */
+            count = fread(usbBuffer, 1, 16, s);
+            cmdsize = usbBuffer[3] |
+                      ((unsigned int) usbBuffer[2] << 8) |
+                      ((unsigned int) usbBuffer[1] << 16) |
+                      ((unsigned int) usbBuffer[0] << 24);
+            size = usbBuffer[7] |
+                      ((unsigned int) usbBuffer[6] << 8) |
+                      ((unsigned int) usbBuffer[5] << 16) |
+                      ((unsigned int) usbBuffer[4] << 24);
+            if (cmdsize == FLASH_SIZE_MAGIC) {
+                if (targetModuleSize) {
+                    /* check that size == targetModuleSize */
+                    if (size == targetModuleSize) {
+                        fprintf(stderr, "flash check successful\n");
+                        result = 0;
+                    } else {
+                        fprintf(stderr, "flash check failed (binary: 0x%08x, target: 0x%08x)\n", size, targetModuleSize);
+                        result = 1;
+                    }
+                } else {
+                    /* we have an old bootloader */
+                    fprintf(stderr, "flash check failed (old bootloader)\n");
+                    result = 1;
+                    if (skipFlashCheck) {
+                        fprintf(stderr, "skipping flash check\n");
+                        result = 0;
+                    }
+                }
+            } else {
+                /* we have an old binary, reset the file pointer */
+                rewind(s);
+                fprintf(stderr, "flash check failed (old binary)\n");
+                result = 1;
+                if (skipFlashCheck) {
+                    fprintf(stderr, "skipping flash check\n");
+                    result = 0;
+                }
+            }
         }
     }
 

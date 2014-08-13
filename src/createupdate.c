@@ -32,6 +32,8 @@
 
 #define APP_MAGIC          0x68664d31
 
+#define FLASH_SIZE_MAGIC   0x68669d31
+
 
 static const char banner[] =
     "createupdate v0.0";
@@ -156,6 +158,19 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "failed to create output file %s\n", outFileName);
             result = 1;
         }
+    }
+
+    if (result == 0) {
+        /* embed FLASH_SIZE into file */
+        putGawbleBE(&buffer[0], FLASH_SIZE_MAGIC);
+        putGawbleBE(&buffer[4], flashSize);
+        putGawbleBE(&buffer[8], flashSize);
+        putGawbleBE(&buffer[12], FLASH_SIZE_MAGIC);
+        if (fwrite(buffer, 1, 16, out) != 16) {
+            fprintf(stderr, "error writing file %s\n", outFileName);
+            result = 1;
+        }
+        /* continue with origional application update */
     }
 
     if (result == 0 && fusesSet) {

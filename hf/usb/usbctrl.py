@@ -40,6 +40,9 @@ from hf.usb.util import USBID_HF_PID, USBID_HFU_PID, USBID_DFU_PID
 HF_CTRL_DEVICE_NOT_FOUND     = 'HFCtrlDevice Not Found'
 HF_CTRL_DEVICE_FOUND         = 'HFCtrlDevice Found!'
 
+HFU_CTRL_DEVICE_NOT_FOUND    = 'HFCtrlDevice Loader Not Found'
+HFU_CTRL_DEVICE_FOUND        = 'HFCtrlDevice Loader Found!'
+
 HF_CTRL_TIMEOUT = 1024
 
 def noprint(x):
@@ -56,6 +59,19 @@ def poll_hf_ctrl_device(intv=1, printer=noprint):
       printer(HF_CTRL_DEVICE_NOT_FOUND)
   # found device
   printer(HF_CTRL_DEVICE_FOUND)
+  return dev
+
+def poll_hf_ctrl_device_loader(intv=1, printer=noprint):
+  # look for device
+  while 1:
+    time.sleep(intv)
+    try:
+      dev = HFCtrlDevice(idProduct=USBID_HFU_PID)
+      break
+    except:
+      printer(HFU_CTRL_DEVICE_NOT_FOUND)
+  # found device
+  printer(HFU_CTRL_DEVICE_FOUND)
   return dev
 
 # libusb_direction
@@ -91,7 +107,9 @@ HF_USBCTRL_REBOOT                = 0x60
 HF_USBCTRL_VERSION               = 0x61
 HF_USBCTRL_CONFIG                = 0x62
 HF_USBCTRL_STATUS                = 0x63
+HF_LOADER_USB_RESTART_ADDR       = 0x66
 HF_USBCTRL_SERIAL                = 0x67
+HF_USBCTRL_FLASH_SIZE            = 0x68
 HF_USBCTRL_NAME                  = 0x70
 HF_USBCTRL_FAN                   = 0x71
 HF_USBCTRL_POWER                 = 0x72
@@ -153,8 +171,11 @@ class HFCtrlReboot():
 class HFCtrlVersion():
   def __init__(self, usbBuffer):
     if len(usbBuffer) >= 4:
-      self.version                = to_uint32(usbBuffer[0:4])
-    else: self.version            = None
+      self.mode                   = (to_uint32(usbBuffer[0:4]) & 0xF0000000) >> 31
+      self.version                = to_uint32(usbBuffer[0:4]) & 0x0FFFFFFF
+    else: 
+      self.version                = None
+      self.mode                   = None
     if len(usbBuffer) >= 9:
       self.crc                    = to_uint32(usbBuffer[5:9])
     else: self.crc                = None
@@ -163,9 +184,24 @@ class HFCtrlVersion():
     else: self.type               = None
   def __str__(self):
     string  = "HFCtrlVersion\n"
+    string += "loader=1, app=0:   {}\n".format(self.mode)
     string += "Version:           {}\n".format(self.version)
     string += "CRC:               {:#x}\n".format(self.crc)
     string += "Type:              {}\n".format(self.type)
+    return string
+
+class HFCtrlFlashSize():
+  def __init__(self, usbBuffer):
+    if len(usbBuffer) >= 4:
+      self.flash_size             = to_uint32(usbBuffer[0:4]) & 0x0FFFFFFF
+    else: self.flash_size         = None
+    if len(usbBuffer) >= 8:
+      self.flash_cmd              = to_uint32(usbBuffer[4:8]) & 0x0FFFFFFF
+    else: self.flash_cmd          = None
+  def __str__(self):
+    string  = "HFCtrlFlashSize\n"
+    string += "Flash Size:        {:#x}\n".format(self.flash_size)
+    string += "Flash CMD Size:    {:#x}\n".format(self.flash_cmd)
     return string
 
 class HFCtrlConfig():
@@ -468,6 +504,19 @@ class HFCtrlDevice():
     # TODO: verify
 
   ##
+  # tell host module to enumerate slaves
+  #   *module should be 0
+  #   *mode:
+  #      0x0000 = enumerate only
+  #      0x0001 = enumerate and reboot into loader
+  ##
+  def enumerate(self, module, mode):
+    module = int(module)
+    request_type = LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE
+    ret = self.dev.ctrl_transfer(request_type, HF_LOADER_USB_RESTART_ADDR, mode, module, None)
+    # TODO: verify
+
+  ##
   #
   ##
   def version(self, module):
@@ -500,6 +549,15 @@ class HFCtrlDevice():
     request_type = LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE
     ret = self.dev.ctrl_transfer(request_type, HF_USBCTRL_SERIAL, 0x0000, module, HF_CTRL_TIMEOUT)
     return HFCtrlSerial(ret)
+
+  ##
+  #
+  ##
+  def flash_size(self, module):
+    module = int(module)
+    request_type = LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_INTERFACE
+    ret = self.dev.ctrl_transfer(request_type, HF_USBCTRL_FLASH_SIZE, 0x0000, module, HF_CTRL_TIMEOUT)
+    return HFCtrlFlashSize(ret)
 
   ##
   # get name

@@ -49,7 +49,7 @@ def check_alpha_schema(datadict):
     if not isinstance(datadict, dict):
         raise SchemaError("Did not receive a dictionary.")
     fields = ['serial', 'board_id', 'test_result', 'manual_check', 'firmware_version',
-              'average_hashrate', 'accepted_shares', 'hardware_errors']
+              'flash_size', 'average_hashrate', 'accepted_shares', 'hardware_errors']
     fields.sort()
     dict_fields = list(datadict)
     dict_fields.sort()
@@ -66,6 +66,8 @@ def check_alpha_schema(datadict):
         raise SchemaError("Field 'manual_check' is not a string.")
     if not isinstance(datadict['firmware_version'], str):
         raise SchemaError("Field 'firmware_version' is not a string.")
+    if not isinstance(datadict['flash_size'], str):
+        raise SchemaError("Field 'flash_size' is not a string.")
     if not isinstance(datadict['average_hashrate'], int):
         raise SchemaError("Field 'average_hashrate' is not an integer.")
     if not isinstance(datadict['accepted_shares'], int):
@@ -82,7 +84,7 @@ def check_hashfast_schema(datadict):
 
     if not isinstance(datadict, dict):
         raise SchemaError("Did not receive a dictionary.")
-    fields = ['serial', 'module_id', 'test_result', 'hash_rate', 'hash_clock', 'voltage', 'cycles', 'firmware']
+    fields = ['serial', 'module_id', 'test_result', 'hash_rate', 'hash_clock', 'voltage', 'cycles', 'firmware', 'flash_size']
     fields.sort()
     dict_fields = list(datadict)
     dict_fields.sort()
@@ -105,43 +107,11 @@ def check_hashfast_schema(datadict):
         raise SchemaError("Field 'cycles' is not an integer.")
     if not isinstance(datadict['firmware'], str):
         raise SchemaError("Field 'firmware' is not a string.")
-    return True
-
-def check_pepper_schema(datadict):
-    """Check validity of Pepper schema.
-
-    Returns True on success, throws an exception on error.
-    """
-
-    if not isinstance(datadict, dict):
-        raise SchemaError("Did not receive a dictionary.")
-    fields = ['serial', 'module_id', 'test_result', 'hash_rate', 'hash_clock', 'voltage', 'cycles', 'firmware']
-    fields.sort()
-    dict_fields = list(datadict)
-    dict_fields.sort()
-    if fields != dict_fields:
-        raise SchemaError("Expected fields (%s) did not match fields we got (%s)."
-                          % (str(fields), str(dict_fields)))
-    if not isinstance(datadict['serial'], str):
-        raise SchemaError("Field 'serial' is not a string.")
-    if not isinstance(datadict['module_id'], str):
-        raise SchemaError("Field 'module_id' is not a string.")
-    if not isinstance(datadict['test_result'], str):
-        raise SchemaError("Field 'test_result' is not a string.")
-    if not isinstance(datadict['hash_rate'], int):
-        raise SchemaError("Field 'hash_rate' is not an integer.")
-    if not isinstance(datadict['hash_clock'], int):
-        raise SchemaError("Field 'hash_clock' is not an integer.")
-    if not isinstance(datadict['voltage'], int):
-        raise SchemaError("Field 'voltage' is not an integer.")
-    if not isinstance(datadict['cycles'], int):
-        raise SchemaError("Field 'cycles' is not an integer.")
-    if not isinstance(datadict['firmware'], str):
-        raise SchemaError("Field 'firmware' is not a string.")
+    if not isinstance(datadict['flash_size'], str):
+        raise SchemaError("Field 'flash_size' is not a string.")
     return True
 
 schema_dictionary = {
     'Alpha': check_alpha_schema,
-    'HashFast': check_hashfast_schema,
-    'Pepper': check_pepper_schema
+    'HashFast': check_hashfast_schema
     }

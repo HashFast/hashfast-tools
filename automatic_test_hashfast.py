@@ -82,7 +82,7 @@ def read_serial(serial_in="FAIL"):
     dev = usbctrl.HFCtrlDevice()
     config = dev.config()
     for module in range(config.modules):
-        return dev.serial(module).pretty_str()
+        return dev.serial(module).hfserial()
 
 # TODO: replace w/ the Python fn
 def write_serial(serial_number):
@@ -165,12 +165,12 @@ def hfload_test(hash_clock, cycles):
     return HRT.get_hashrate()
 
 
-def automatic_test(hash_clock, voltage, cycles, firmware):
+def automatic_test(hash_clock, voltage, cycles, firmware, flash):
 
 
     if not MOC and firmware != None:
         print("Connect module and wait for firmware load to complete.")
-        subprocess.check_output(['./firmware_update.py', '--firmware', firmware])
+        subprocess.check_output(['./firmware_update.py', '--firmware', firmware, '--flash', flash])
         print("Firmware loaded.")
         time.sleep (10)
     else:
@@ -230,6 +230,8 @@ def main(argv):
                        help='Cycles to run test for.')
     parser.add_argument('--firmware', action='store',
                        help='path to firmware release directory.')
+    parser.add_argument('--flash', action='store', default=False,
+                       help='flash size in kB')
     parser.add_argument('--data', action='store',
                        help='path to data directory.')
     parser.add_argument('--moc', action='store_true',
@@ -247,7 +249,13 @@ def main(argv):
     if args.firmware is not None:
         print("firmware directory: '%s'" % args.firmware)
     else:
-        print("Please specify a firmware directory.")
+        print("Please specify a firmware directory with --firmware.")
+        exit(1)
+
+    if args.flash is not False:
+        print("flash size: '%sk'" % args.flash)
+    else:
+        print("Please specify a flash size with --flash.")
         exit(1)
 
     if not os.path.isdir(args.firmware):
@@ -257,7 +265,7 @@ def main(argv):
     if args.data is not None:
         print("data directory: '%s'" % args.data)
     else:
-        print("Please specify a data output directory.")
+        print("Please specify a data output directory with --data.")
         exit(1)
 
     if not os.path.isdir(args.data):
@@ -273,7 +281,7 @@ def main(argv):
         else:
             module_id=args.module_id
 
-        result = automatic_test(int(args.hash_clock), int(args.voltage), int(args.cycles), args.firmware)
+        result = automatic_test(int(args.hash_clock), int(args.voltage), int(args.cycles), args.firmware, args.flash)
         serial = "NONE"
         if (result[0] == "PASS"):
             if (args.serial == 'GENERATE'):
@@ -306,6 +314,7 @@ def main(argv):
                      'voltage': int(args.voltage),
                      'cycles': int(args.cycles),
                      'firmware': args.firmware,
+                     'flash_size': args.flash
                     }
         datawriter = boardlib.BoardData(args.data)
         datawriter.Store(test_data, DATA_STORE)

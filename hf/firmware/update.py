@@ -29,12 +29,13 @@ import time
 import os
 
 from hf.errors   import HF_ChecksumError, HF_UpdateError
-from hf.usb.util import UC_PART
+from hf.usb.util import UC_PART_BASE
 
 class HF_Updater():
 
   def __init__(self):
     self.dev            = None
+    self.dev_loader     = None
     self.modules        = None
     # dependencies
     pathlist = [".", ".."]
@@ -80,22 +81,30 @@ class HF_Updater():
     for r in hfr['releases']:
       print(r['version'])
 
-  def fetch_release_firmware(self, release=None):
+  def fetch_release_firmware(self, release=None, flash=512):
     hfr = self.fetch_release_firmwares()
     if release is None:
       release = hfr['latest']
     for r in hfr['releases']:
       if r['version'] == release:
-        return self.fetch_file(r['hfu'])
+        return self.fetch_file(r['uc3-hfu-{}'.format(flash)])
     raise HF_UpdateError("Release not found! Use --list to find.")
 
-  def fetch_release_bootloader(self, release=None):
+  def fetch_release_bootloader_update(self, release=None, flash=512):
     hfr = self.fetch_release_firmwares()
     if release is None:
       release = hfr['latest']
     for r in hfr['releases']:
       if r['version'] == release:
-        return self.fetch_file(r['dfu'])
+        return self.fetch_file(r['dfu-hfu-{}'.format(flash)])
+
+  def fetch_release_bootloader(self, release=None, flash=512):
+    hfr = self.fetch_release_firmwares()
+    if release is None:
+      release = hfr['latest']
+    for r in hfr['releases']:
+      if r['version'] == release:
+        return self.fetch_file(r['dfu-hex-{}'.format(flash)])
 
   def fetch_debug_builds(self):
     url = 'https://gist.github.com/HF-SW-Team/224b2a8d746007ec5851/raw/firmware-debug.json'
@@ -112,11 +121,11 @@ class HF_Updater():
       f = urlopen(url)
       return load(f)
 
-  def fetch_debug_build(self, build=None):
+  def fetch_debug_build(self, build=None, flash=512):
     hfb = self.fetch_debug_builds()
     for b in hfb['builds']:
       if b['build'] == build:
-        return self.fetch_file(b['hfu'])
+        return self.fetch_file(b['uc3-hfu-{}'.format(flash)])
     raise HF_UpdateError("Build not found! Use --debug --list to find.")
 
   def list_debug_builds(self):
@@ -163,7 +172,7 @@ class HF_Updater():
 
   def enter_app(self, module=0):
     print("\nEntering Application Mode...")
-    subprocess.check_call([self.HFUPDATE, '-r'])
+    self.dev_loader.reboot(module, 0x0000)
     time.sleep(3)
 
   def read_version(self, module=0):
@@ -171,6 +180,15 @@ class HF_Updater():
 
   def read_serial(self, module=0):
     return self.dev.serial(module)
+
+  def read_version_loader(self, module=0):
+    return self.dev_loader.version(module)
+
+  def read_serial_loader(self, module=0):
+    return self.dev_loader.serial(module)
+
+  def read_flash_size_loader(self, module=0):
+    return self.dev_loader.flash_size(module)
 
   def enumerate_modules(self):
     self.dev.power_set(0, 1)
@@ -185,14 +203,46 @@ class HF_Updater():
       print("Module {0} ({1})".format(module, serial.hfserial()))
       version = self.dev.version(module)
       print("  current version: {0} crc: {1:#x}".format(version.version, version.crc))
+      if version.version >= 4:
+        flash_size = self.dev.flash_size(module)
+        print("  flash_size: {0}k".format(flash_size.flash_size))
+      else:
+        print("    WARNING your bootloader is deprecated and may not work with new firmware releases.")
+        print("    If this persists, try running this program again with the --bootloader command.")
 
-  def load_firmware_hfu(self, hfu_file):
+  def enumerate_modules_loader(self):
+    self.dev_loader.enumerate(0, 0x0001)
+    time.sleep(3)
+    print("")
+    config = self.dev_loader.config()
+    self.modules = config.modules
+    print(  "Modules found: {}".format(config.modules))
+    print(  "")
+    for module in range(self.modules):
+      serial  = self.dev_loader.serial(module)
+      print("Module {0} ({1})".format(module, serial.hfserial()))
+      version = self.dev_loader.version(module)
+      print("  current version: {0} crc: {1:#x}".format(version.version, version.crc))
+      if version.version >= 4:
+        flash_size = self.dev_loader.flash_size(module)
+        print("  flash_size: {0}k".format(flash_size.flash_size))
+      else:
+        print("    WARNING your bootloader is deprecated and may not work with new firmware releases.")
+        print("    If this persists, try running this program again with the --bootloader command.")
+
+  def load_firmware_hfu(self, hfu_file, force=False):
     for module in range(self.modules):
       print("")
       print("Updating module {}...".format(module))
-      subprocess.check_call([self.HFUPDATE, '-m%d' % module, hfu_file])
+      if force:
+        subprocess.check_call([self.HFUPDATE, '-m%d' % module, '-f', hfu_file])
+      else:
+        subprocess.check_call([self.HFUPDATE, '-m%d' % module, hfu_file])
 
-  def load_firmware_dfu(self, hex_file):
+  def load_firmware_dfu(self, hex_file, flash=512):
+    print("")
+    print("Loading HF Bootloader.")
+    UC_PART = "{}{}".format(UC_PART_BASE, flash)
     subprocess.check_call([self.DFU_PROGRAMMER, UC_PART, 'erase'])
     subprocess.check_call([self.DFU_PROGRAMMER, UC_PART, 'flash', '--suppress-bootloader-mem', hex_file])
     subprocess.check_call([self.DFU_PROGRAMMER, UC_PART, 'reset'])

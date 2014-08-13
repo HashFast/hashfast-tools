@@ -65,17 +65,30 @@ USBID_HFU_PID=0x8001
 USBID_DFU_VID=0x03eb
 USBID_DFU_PID=0x2ff6
 
-UC_PART='at32uc3b0512'
+UC_PART_BASE='at32uc3b0'
 
 parser = argparse.ArgumentParser(description='HashFast Firmware Updater.')
 parser.add_argument('--confirm-reload', action='store_true', default=False,
                    help='detect existing serial and confirm reload of firmware')
 parser.add_argument('--firmware', action='store', default='.',
                    help='path to the firmware update directory')
+parser.add_argument('--flash', action='store', default=False,
+                   help='flash size in kB')
+parser.add_argument('--old', action='store_true', default=False,
+                   help='old firmware directory structure without FLASH_SIZE folders')
 args = parser.parse_args()
 
+
+if args.flash is False:
+    print ("Must specify flash size with --flash.")
+    exit(1)
+
 CONFIRM_RELOAD = args.confirm_reload
-FIRMWARE_DIR = args.firmware
+UC_PART = UC_PART_BASE + args.flash
+if args.old is True:
+    FIRMWARE_DIR = args.firmware
+else:
+    FIRMWARE_DIR = args.firmware + "/{}k".format(args.flash)
 
 print ("confirm is ", CONFIRM_RELOAD)
 print ("FIRMWARE_DIR is ", FIRMWARE_DIR)

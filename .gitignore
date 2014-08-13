@@ -19,6 +19,8 @@ profiler_*.csv
 surface_*.csv
 surface_*.eps
 surface_*.png
+gmon.out
+miner.stderr
 
 # Ignore particular executables
 readserial

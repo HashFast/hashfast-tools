@@ -29,11 +29,12 @@ import argparse
 
 def parse_args():
   parser = argparse.ArgumentParser(description='Update HashFast modules. By default loads the latest release firmware.')
-  parser.add_argument('-l', '--list',    dest='list',    action='store_true', help='list firmware')
-  parser.add_argument('-r', '--release', dest='release', type=str, help='specific release to load')
+  parser.add_argument('-l', '--list',       dest='list',       action='store_true', help='list firmware')
+  parser.add_argument('-r', '--release',    dest='release',    type=str, help='specific release to load')
+  parser.add_argument('-t', '--bootloader', dest='bootloader', action='store_true', help='installs the latest bootloader')
   # debug
-  parser.add_argument('-d', '--debug',   dest='debug',   action='store_true', help='load debug firmware')
-  parser.add_argument('-b', '--build',   dest='build',   type=str, help='specific build to load')
+  parser.add_argument('-d', '--debug',      dest='debug',      action='store_true', help='load debug firmware')
+  parser.add_argument('-b', '--build',      dest='build',      type=str, help='specific build to load')
   return parser.parse_args()
 
 if __name__ == '__main__':
@@ -54,35 +55,100 @@ def main(args):
     print("HashFast is not responsible for damage resulting from debug builds.")
 
   updater = HF_Updater()
-  if args.list:
+
+  ####################
+  # BOOTLOADER       #
+  ####################
+  if args.bootloader:
+    # doing a load, wait for a valid HashFast device
+    dev = util.poll_hf_device()
+    if dev is util.USB_DEV_DFU:
+      # found a device that needs a bootloader
+      print("Bootloader not detected.")
+      for flash_size in [512, 128]:
+        try:
+          dfu = updater.fetch_release_bootloader(flash=flash_size)
+          updater.load_firmware_dfu(dfu, flash=flash_size)
+          break
+        except:
+          pass
+      # wait for device to reboot
+      util.poll_hf_device()
+      return
+
+    elif dev is util.USB_DEV_HF:
+      # found device in application mode
+      updater.dev = usbctrl.poll_hf_ctrl_device(printer=printme)
+      #updater.enumerate_modules()
+      updater.enter_loader()
+
+    # load firmware
+    updater.dev_loader = usbctrl.poll_hf_ctrl_device_loader(printer=printme)
+    updater.enumerate_modules_loader()
+    # get flash size
+    loader_version = updater.read_version_loader().version
+    if loader_version >= 4:
+      flash_size = int(updater.read_flash_size_loader().flash_size / 1024)
+    else:
+      flash_size = 512
+    print("Using flash_size of: {}k".format(flash_size))
+    # fetch file
+    hfu = updater.fetch_release_bootloader_update(flash=flash_size)
+    updater.load_firmware_hfu(hfu, force=False)
+    updater.enter_app()
+
+
+  ####################
+  # LIST             #
+  ####################
+  elif args.list:
     # list releases/builds
     if args.debug:
       updater.list_debug_builds()
     else:
       updater.list_release_firmwares()
 
+
+  ####################
+  # FIRMWARE         #
+  ####################
   else:
     # doing a load, wait for a valid HashFast device
     dev = util.poll_hf_device()
     if dev is util.USB_DEV_DFU:
       # found a device that needs a bootloader
-      # if no release specified, then latest will be loaded
-      dfu = updater.fetch_release_bootloader(args.release)
-      updater.load_firmware_dfu(dfu)
+      print("Bootloader not detected.")
+      for flash_size in [512, 128]:
+        try:
+          # if no release specified, then latest will be loaded
+          dfu = updater.fetch_release_bootloader(args.release, flash=flash_size)
+          updater.load_firmware_dfu(dfu, flash=flash_size)
+          break
+        except:
+          pass
       # wait for device to reboot
       util.poll_hf_device()
 
-    elif dev is util.USB_DEV_HFU:
-      # found device in loader mode
-      updater.enter_app()
+    elif dev is util.USB_DEV_HF:
+      # found device in application mode
+      updater.dev = usbctrl.poll_hf_ctrl_device(printer=printme)
+      #updater.enumerate_modules()
+      updater.enter_loader()
 
     # load firmware
     if args.debug or args.build:
       if args.build:
-        updater.dev = usbctrl.poll_hf_ctrl_device(printer=printme)
-        updater.enumerate_modules()
-        updater.enter_loader()
-        hfu = updater.fetch_debug_build(args.build)
+        updater.dev_loader = usbctrl.poll_hf_ctrl_device_loader(printer=printme)
+        updater.enumerate_modules_loader()
+        # get flash size
+        loader_version = updater.read_version_loader().version
+        if loader_version >= 4:
+          flash_size = int(updater.read_flash_size_loader().flash_size / 1024)
+        else:
+          flash_size = 512
+        print("Using flash_size of: {}k".format(flash_size))
+        # fetch file
+        hfu = updater.fetch_debug_build(args.build, flash=flash_size)
         updater.load_firmware_hfu(hfu)
         updater.enter_app()
       else:
@@ -90,11 +156,18 @@ def main(args):
 
     else:
       # if no release specified, then latest will be loaded
-      updater.dev = usbctrl.poll_hf_ctrl_device(printer=printme)
-      updater.enumerate_modules()
-      updater.enter_loader()
+      updater.dev_loader = usbctrl.poll_hf_ctrl_device_loader(printer=printme)
+      updater.enumerate_modules_loader()
+      # get flash size
+      loader_version = updater.read_version_loader().version
+      if loader_version >= 4:
+        flash_size = int(updater.read_flash_size_loader().flash_size / 1024)
+      else:
+        flash_size = 512
+      print("Using flash_size of: {}k".format(flash_size))
+      # fetch file
       # if no release specified, then latest will be loaded
-      hfu = updater.fetch_release_firmware(args.release)
+      hfu = updater.fetch_release_firmware(args.release, flash=flash_size)
       updater.load_firmware_hfu(hfu)
       updater.enter_app()
 
